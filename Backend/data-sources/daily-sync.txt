@@ -1,0 +1,3 @@
+# Daily sync URLs - These are scraped automatically every day at 2 PM EST
+# Blood supply status page - updates daily with current blood supply levels
+https://americasblood.org/for-donors/americas-blood-supply/

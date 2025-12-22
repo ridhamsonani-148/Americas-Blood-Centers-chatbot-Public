@@ -1,0 +1,50 @@
+body {
+  margin: 0;
+  font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Message styling */
+.botMessage, .userMessage {
+  border-radius: 1rem;
+  padding: 0.75rem 1rem;
+  margin: 0.5rem 0;
+  max-width: 75%;
+  word-wrap: break-word;
+}
+
+.botMessage {
+  border-bottom-left-radius: 0.25rem;
+}
+
+.userMessage {
+  border-bottom-right-radius: 0.25rem;
+}
