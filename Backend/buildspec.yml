@@ -122,11 +122,12 @@ phases:
               CODEBUILD_ROLE_ARN=$(aws sts get-caller-identity --query Arn --output text | sed 's/:user\//:role\//' | sed 's/\/[^\/]*$/\/codebuild-service-role/')
               echo "🔍 Debug: CodeBuild role ARN: $CODEBUILD_ROLE_ARN"
               
+              # Note: We'll add the Knowledge Base role after it's created
               aws opensearchserverless create-access-policy \
                 --name "${PROJECT_NAME}-data-access-policy" \
                 --type data \
                 --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"Permission":["aoss:CreateCollectionItems","aoss:DeleteCollectionItems","aoss:UpdateCollectionItems","aoss:DescribeCollectionItems"],"ResourceType":"collection"},{"Resource":["index/'$COLLECTION_NAME'/*"],"Permission":["aoss:CreateIndex","aoss:DeleteIndex","aoss:UpdateIndex","aoss:DescribeIndex","aoss:ReadDocument","aoss:WriteDocument"],"ResourceType":"index"}],"Principal":["arn:aws:iam::'$AWS_ACCOUNT_ID':root","'$CODEBUILD_ROLE_ARN'"]}]' \
-                --region "$CDK_DEFAULT_REGION" && echo "✓ Data access policy created"
+                --region "$CDK_DEFAULT_REGION" && echo "✓ Data access policy created (will update with KB role later)"
             else
               echo "✓ Data access policy already exists"
             fi
@@ -197,8 +198,26 @@ phases:
             exit 1
           fi
           
-          # Step 4.5: Let Knowledge Base create the index automatically
-          echo "Step 4.5: Skipping manual index creation - Knowledge Base will create it automatically..."
+          # Step 4.5: Update data access policy with Knowledge Base role
+          echo "Step 4.5: Adding Knowledge Base role to OpenSearch data access policy..."
+          
+          # Extract just the role name from the full ARN
+          KB_ROLE_NAME=$(echo "$KB_ROLE_ARN" | sed 's/.*role\///')
+          echo "🔍 Debug: KB Role Name: $KB_ROLE_NAME"
+          echo "🔍 Debug: KB Role ARN: $KB_ROLE_ARN"
+          
+          # Update the data access policy to include the Knowledge Base role
+          echo "Updating data access policy to include Knowledge Base role..."
+          aws opensearchserverless update-access-policy \
+            --name "${PROJECT_NAME}-data-access-policy" \
+            --type data \
+            --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"Permission":["aoss:CreateCollectionItems","aoss:DeleteCollectionItems","aoss:UpdateCollectionItems","aoss:DescribeCollectionItems"],"ResourceType":"collection"},{"Resource":["index/'$COLLECTION_NAME'/*"],"Permission":["aoss:CreateIndex","aoss:DeleteIndex","aoss:UpdateIndex","aoss:DescribeIndex","aoss:ReadDocument","aoss:WriteDocument"],"ResourceType":"index"}],"Principal":["arn:aws:iam::'$AWS_ACCOUNT_ID':root","'$KB_ROLE_ARN'"]}]' \
+            --region "$CDK_DEFAULT_REGION" && echo "✓ Data access policy updated with Knowledge Base role"
+          
+          # Wait for policy update to propagate
+          echo "Waiting for policy update to propagate..."
+          sleep 10
+          
           echo "✓ Collection is ready for Knowledge Base creation"
           
           # Step 5: Create Knowledge Base
