@@ -10,41 +10,35 @@ phases:
       - npm install -g aws-cdk@latest
       - cd Backend
       - npm install
-      - echo "Checking AWS permissions..."
-      - aws sts get-caller-identity
-      - echo "Checking Bedrock model availability..."
-      - aws bedrock list-foundation-models --region ${CDK_DEFAULT_REGION:-us-east-1} --query "modelSummaries[?contains(modelId, 'claude-3-haiku') || contains(modelId, 'titan-embed')].{ModelId:modelId,Status:modelLifecycle.status}" --output table || echo "Warning: Could not list Bedrock models"
 
   pre_build:
     commands:
-      - echo "Building TypeScript..."
+      - echo "=== Building TypeScript ==="
       - npm run build
-      - echo "Installing Lambda dependencies..."
+      - echo "✅ TypeScript build completed"
+      - echo "=== Installing Lambda dependencies ==="
       - cd lambda && pip install -r requirements.txt -t . && cd ..
-      - echo "Bootstrapping CDK..."
+      - echo "✅ Lambda dependencies installed"
+      - echo "=== Bootstrapping CDK Environment ==="
       - cdk bootstrap --require-approval never
-      - echo "Setting default environment variables..."
-      - export PROJECT_NAME=${PROJECT_NAME:-americas-blood-centers-bedrock}
-      - export MODEL_ID=${MODEL_ID:-anthropic.claude-3-haiku-20240307-v1:0}
-      - export EMBEDDING_MODEL_ID=${EMBEDDING_MODEL_ID:-amazon.titan-embed-text-v1}
-      - export CDK_DEFAULT_REGION=${CDK_DEFAULT_REGION:-us-east-1}
-      - echo "Configuration - Project: $PROJECT_NAME, Region: $CDK_DEFAULT_REGION, Model: $MODEL_ID"
+      - echo "✅ CDK Bootstrap completed"
 
   build:
     commands:
       - |
         if [ "$ACTION" = "destroy" ]; then
-          echo "Destroying stack..."
+          echo "=== Destroying Stack ==="
           cdk destroy AmericasBloodCentersBedrockStack --force \
             --context projectName="$PROJECT_NAME" \
             --context modelId="$MODEL_ID" \
             --context embeddingModelId="$EMBEDDING_MODEL_ID"
+          echo "✅ Stack destroyed successfully"
         else
           echo "========================================="
           echo "Deploying America's Blood Centers Bedrock Chatbot"
           echo "========================================="
           
-          echo "Step 1: Deploying CDK stack..."
+          echo "=== PHASE 1: CDK Infrastructure Deployment ==="
           cdk deploy AmericasBloodCentersBedrockStack --require-approval never \
             --context projectName="$PROJECT_NAME" \
             --context modelId="$MODEL_ID" \
@@ -52,36 +46,37 @@ phases:
             --outputs-file outputs.json
           
           if [ $? -ne 0 ]; then
-            echo "✗ CDK deployment failed"
+            echo "❌ ERROR: CDK deployment failed"
             exit 1
           fi
           
-          echo "✓ CDK deployment successful"
+          echo "✅ CDK deployment successful"
           
-          echo "Step 2: Extracting outputs..."
+          echo "=== PHASE 2: Extracting CDK Outputs ==="
           DOCUMENTS_BUCKET=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.DocumentsBucketName // empty')
           KB_ROLE_ARN=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.KnowledgeBaseRoleArn // empty')
           CHAT_LAMBDA_NAME=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.ChatLambdaFunctionName // empty')
           DATA_INGESTION_LAMBDA_NAME=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.DataIngestionFunctionName // empty')
+          API_URL=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.ApiGatewayUrl // empty')
           AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           
           if [ -z "$DOCUMENTS_BUCKET" ] || [ -z "$KB_ROLE_ARN" ] || [ -z "$CHAT_LAMBDA_NAME" ]; then
-            echo "✗ Failed to extract required outputs from CDK deployment"
+            echo "❌ ERROR: Failed to extract required outputs from CDK deployment"
             echo "Documents Bucket: $DOCUMENTS_BUCKET"
             echo "KB Role ARN: $KB_ROLE_ARN"
             echo "Chat Lambda: $CHAT_LAMBDA_NAME"
             exit 1
           fi
           
-          echo "✓ Outputs extracted successfully"
-          echo "  Documents Bucket: $DOCUMENTS_BUCKET"
-          echo "  KB Role ARN: $KB_ROLE_ARN"
-          echo "  Chat Lambda: $CHAT_LAMBDA_NAME"
-          echo "  Data Ingestion Lambda: $DATA_INGESTION_LAMBDA_NAME"
-          
+          echo "✅ Outputs extracted successfully"
+          echo "  📁 Documents Bucket: $DOCUMENTS_BUCKET"
+          echo "  🔐 KB Role ARN: $KB_ROLE_ARN"
+          echo "  💬 Chat Lambda: $CHAT_LAMBDA_NAME"
+          echo "  📊 Data Ingestion Lambda: $DATA_INGESTION_LAMBDA_NAME"
+          echo "  🌐 API Gateway URL: $API_URL"
           echo ""
           echo "========================================="
-          echo "Creating Knowledge Base Resources"
+          echo "=== PHASE 3: Knowledge Base Resources ==="
           echo "========================================="
           
           # Step 3: Create OpenSearch Serverless Collection
@@ -236,8 +231,8 @@ phases:
             fi
           fi
           
-          # Step 4: Create Data Sources (S3 for PDFs + Web Crawler for Websites)
-          echo "Step 4: Creating Data Sources..."
+          # Step 6: Create Data Sources (S3 for PDFs + Web Crawler for Websites)
+          echo "=== PHASE 4: Creating Dual Data Sources ==="
           BUCKET_ARN="arn:aws:s3:::${DOCUMENTS_BUCKET}"
           
           # Data Source 1: S3 for PDFs with Bedrock Data Automation Parser
@@ -362,8 +357,8 @@ phases:
           # Set primary data source ID for backward compatibility
           DS_ID="$S3_DS_ID"
           
-          # Step 5: Upload initial documents
-          echo "Step 5: Uploading initial documents..."
+          # Step 7: Upload initial documents
+          echo "=== PHASE 5: Document Upload ==="
           
           # Upload PDF files to pdfs/ prefix for S3 data source
           if [ -d "data-sources" ]; then
@@ -376,8 +371,8 @@ phases:
           
           echo "✓ Initial documents uploaded"
           
-          # Step 6: Update Lambda environment variables
-          echo "Step 6: Updating Lambda environment variables..."
+          # Step 8: Update Lambda environment variables
+          echo "=== PHASE 6: Lambda Configuration ==="
           
           # Update chat Lambda
           CHAT_ENV=$(aws lambda get-function-configuration \
@@ -415,8 +410,8 @@ phases:
           
           echo "✓ Lambda environment variables updated"
           
-          # Step 7: Start initial ingestion jobs for both data sources
-          echo "Step 7: Starting Knowledge Base ingestion jobs..."
+          # Step 9: Start initial ingestion jobs for both data sources
+          echo "=== PHASE 7: Knowledge Base Ingestion ==="
           
           # Start S3 ingestion job for PDFs
           S3_INGESTION_JOB_ID=$(aws bedrock-agent start-ingestion-job \
@@ -443,89 +438,92 @@ phases:
           
           echo ""
           echo "========================================="
-          echo "✓ Deployment Complete!"
+          echo "✅ Deployment Complete!"
           echo "========================================="
-          echo "Knowledge Base ID: $KB_ID"
-          echo "S3 Data Source ID: $S3_DS_ID (PDFs with Bedrock Data Automation)"
-          echo "Web Crawler Data Source ID: $WEB_DS_ID (Websites)"
-          echo "Documents Bucket: $DOCUMENTS_BUCKET"
-          echo "Collection ARN: $COLLECTION_ARN"
-          echo "S3 Ingestion Job ID: $S3_INGESTION_JOB_ID"
-          echo "Web Ingestion Job ID: $WEB_INGESTION_JOB_ID"
+          echo "🧠 Knowledge Base ID: $KB_ID"
+          echo "📄 S3 Data Source ID: $S3_DS_ID (PDFs with Bedrock Data Automation)"
+          echo "🌐 Web Crawler Data Source ID: $WEB_DS_ID (Websites)"
+          echo "📁 Documents Bucket: $DOCUMENTS_BUCKET"
+          echo "🔍 Collection ARN: $COLLECTION_ARN"
+          echo "📊 S3 Ingestion Job ID: $S3_INGESTION_JOB_ID"
+          echo "🕷️ Web Ingestion Job ID: $WEB_INGESTION_JOB_ID"
+          echo "🌐 API Gateway URL: $API_URL"
           echo "========================================="
-          
-          # Extract API URL
-          API_URL=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.ApiGatewayUrl // empty')
-          
           echo ""
           echo "========================================="
-          echo "Deployment Summary"
+          echo "📋 Deployment Summary"
           echo "========================================="
-          echo "Documents Bucket: $DOCUMENTS_BUCKET"
-          echo "Knowledge Base ID: $KB_ID"
-          echo "S3 Data Source ID: $S3_DS_ID (PDFs)"
-          echo "Web Data Source ID: $WEB_DS_ID (Websites)"
-          echo "API Gateway URL: $API_URL"
+          echo "📁 Documents Bucket: $DOCUMENTS_BUCKET"
+          echo "🧠 Knowledge Base ID: $KB_ID"
+          echo "📄 S3 Data Source ID: $S3_DS_ID (PDFs)"
+          echo "🌐 Web Data Source ID: $WEB_DS_ID (Websites)"
+          echo "🔗 API Gateway URL: $API_URL"
           echo ""
           echo "========================================="
-          echo "Next Steps"
+          echo "🚀 Next Steps"
           echo "========================================="
-          echo "1. Wait 5-10 minutes for ingestion job to complete"
+          echo "1️⃣ Wait 5-10 minutes for ingestion jobs to complete"
           echo ""
-          echo "2. Test the API:"
+          echo "2️⃣ Test the API:"
           echo "   curl -X POST $API_URL \\"
           echo "     -H 'Content-Type: application/json' \\"
           echo "     -d '{\"message\":\"How many people donate blood?\",\"language\":\"en\"}'"
           echo ""
-          echo "3. Test Spanish support:"
+          echo "3️⃣ Test Spanish support:"
           echo "   curl -X POST $API_URL \\"
           echo "     -H 'Content-Type: application/json' \\"
           echo "     -d '{\"message\":\"¿Cuántas personas donan sangre?\",\"language\":\"es\"}'"
           echo ""
-          echo "4. Monitor ingestion jobs:"
+          echo "4️⃣ Monitor ingestion jobs:"
           echo "   # S3 Data Source (PDFs):"
           echo "   aws bedrock-agent get-ingestion-job \\"
           echo "     --knowledge-base-id $KB_ID \\"
           echo "     --data-source-id $S3_DS_ID \\"
-          echo "     --ingestion-job-id $S3_INGESTION_JOB_ID"
+          echo "     --ingestion-job-id $S3_INGESTION_JOB_ID \\"
+          echo "     --region $CDK_DEFAULT_REGION"
           echo ""
           echo "   # Web Crawler Data Source:"
           echo "   aws bedrock-agent get-ingestion-job \\"
           echo "     --knowledge-base-id $KB_ID \\"
           echo "     --data-source-id $WEB_DS_ID \\"
-          echo "     --ingestion-job-id $WEB_INGESTION_JOB_ID"
+          echo "     --ingestion-job-id $WEB_INGESTION_JOB_ID \\"
+          echo "     --region $CDK_DEFAULT_REGION"
           echo ""
-          echo "5. Add more documents:"
+          echo "5️⃣ Add more documents:"
           echo "   # Add PDFs (uses Bedrock Data Automation parser):"
           echo "   aws s3 cp document.pdf s3://$DOCUMENTS_BUCKET/pdfs/"
           echo "   aws bedrock-agent start-ingestion-job \\"
           echo "     --knowledge-base-id $KB_ID \\"
-          echo "     --data-source-id $S3_DS_ID"
+          echo "     --data-source-id $S3_DS_ID \\"
+          echo "     --region $CDK_DEFAULT_REGION"
           echo ""
           echo "   # Re-crawl websites (automatic parsing):"
           echo "   aws bedrock-agent start-ingestion-job \\"
           echo "     --knowledge-base-id $KB_ID \\"
-          echo "     --data-source-id $WEB_DS_ID"
+          echo "     --data-source-id $WEB_DS_ID \\"
+          echo "     --region $CDK_DEFAULT_REGION"
           echo ""
           echo "📊 Monitor resources:"
-          echo "- Knowledge Base: https://console.aws.amazon.com/bedrock/home?region=${CDK_DEFAULT_REGION}#/knowledge-bases"
-          echo "- OpenSearch: https://console.aws.amazon.com/aos/home?region=${CDK_DEFAULT_REGION}#opensearch/collections"
-          echo "- S3 Bucket: https://s3.console.aws.amazon.com/s3/buckets/$DOCUMENTS_BUCKET"
+          echo "  • Knowledge Base: https://console.aws.amazon.com/bedrock/home?region=${CDK_DEFAULT_REGION}#/knowledge-bases"
+          echo "  • OpenSearch: https://console.aws.amazon.com/aos/home?region=${CDK_DEFAULT_REGION}#opensearch/collections"
+          echo "  • S3 Bucket: https://s3.console.aws.amazon.com/s3/buckets/$DOCUMENTS_BUCKET"
           echo ""
           echo "💰 Estimated monthly cost: \$8-20 (vs \$20+ for Q Business)"
+          echo "🎯 Features: Dual data sources, bilingual support, automatic web crawling"
           echo ""
         fi
 
   post_build:
     commands:
       - echo "========================================="
-      - echo "Deployment Complete"
+      - echo "🎉 Deployment Complete"
       - echo "========================================="
       - |
         if [ "$ACTION" = "deploy" ]; then
           echo "✅ Bedrock chatbot deployed successfully"
           echo "📊 Check CloudWatch Logs for Lambda execution details"
           echo "🧠 Test Knowledge Base retrieval via the chat API"
+          echo "🌐 Monitor ingestion jobs in Bedrock console"
         else
           echo "✅ Stack destroyed successfully"
         fi

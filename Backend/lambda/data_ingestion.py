@@ -1,6 +1,7 @@
 """
 Data Ingestion Lambda for America's Blood Centers Bedrock Chatbot
-Handles web scraping and document processing for Knowledge Base
+Handles PDF processing for Knowledge Base S3 Data Source
+Web crawling is handled automatically by Web Crawler Data Source
 """
 
 import json
@@ -8,7 +9,6 @@ import boto3
 import logging
 import os
 import requests
-from bs4 import BeautifulSoup
 from datetime import datetime
 from typing import Dict, List, Any
 import urllib.parse
@@ -61,10 +61,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             logger.info(f"Total PDFs processed: {results['pdfs_processed']} from URLs, {results['manual_pdfs_processed']} manual uploads")
         
-        # Note: Web crawling is now handled automatically by the Web Crawler data source
-        # No need to manually scrape URLs - just trigger the ingestion job
+        # Note: Web crawling is handled automatically by Web Crawler Data Source
+        # The Web Crawler Data Source will automatically crawl the seed URLs configured in buildspec.yml
         if urls and data_source_type in ['both', 'web']:
-            logger.info(f"URLs will be crawled automatically by Web Crawler data source: {urls}")
+            logger.info(f"URLs will be crawled automatically by Web Crawler Data Source: {urls}")
+            logger.info("No manual web scraping needed - Web Crawler Data Source handles this automatically")
         
         # Start ingestion jobs based on data source type
         if data_source_type in ['both', 's3'] and S3_DATA_SOURCE_ID:
@@ -171,81 +172,6 @@ def process_pdfs_for_s3() -> Dict[str, Any]:
     logger.info(f"PDF processing complete: {len(results['processed'])} processed, {len(results['failed'])} failed")
     return results
 
-def scrape_daily_urls(urls: List[str]) -> Dict[str, Any]:
-    """
-    Scrape daily URLs (blood supply status)
-    Note: This is deprecated - Web Crawler data source handles website crawling automatically
-    """
-    results = {'scraped': [], 'failed': []}
-    
-    logger.info("Daily URL scraping is deprecated - Web Crawler data source handles this automatically")
-    
-    # If URLs are provided, log them for reference
-    if urls:
-        logger.info(f"URLs that will be crawled by Web Crawler data source: {urls}")
-        results['urls_noted'] = urls
-    
-    return results
-
-def scrape_all_urls() -> Dict[str, Any]:
-    """
-    Scrape all configured URLs from urls.txt file
-    Note: This function is deprecated - Web Crawler data source handles website crawling automatically
-    """
-    results = {'scraped': [], 'failed': [], 'pdfs_processed': []}
-    
-    logger.warning("scrape_all_urls() is deprecated - Web Crawler data source handles website crawling automatically")
-    
-    # Get URLs from urls.txt file
-    website_urls = get_website_urls_from_file()
-    pdf_urls = get_pdf_urls_from_file()
-    
-    logger.info(f"Found {len(website_urls)} website URLs and {len(pdf_urls)} PDF URLs in urls.txt")
-    
-    # Note: Website URLs should be handled by Web Crawler data source
-    # This function is kept for backward compatibility only
-    
-    return results
-
-def get_pdf_urls_from_file() -> List[str]:
-    """
-    Read PDF URLs from urls.txt file in S3 or from local data-sources folder
-    """
-    pdf_urls = []
-    
-    try:
-        # First try to read from S3 (uploaded during deployment)
-        try:
-            response = s3_client.get_object(Bucket=DOCUMENTS_BUCKET, Key='data-sources/urls.txt')
-            content = response['Body'].read().decode('utf-8')
-            logger.info("Successfully read urls.txt from S3")
-        except s3_client.exceptions.NoSuchKey:
-            # Fallback: try reading from documents/ prefix
-            try:
-                response = s3_client.get_object(Bucket=DOCUMENTS_BUCKET, Key='documents/urls.txt')
-                content = response['Body'].read().decode('utf-8')
-                logger.info("Successfully read urls.txt from S3 documents/ prefix")
-            except s3_client.exceptions.NoSuchKey:
-                logger.error("urls.txt file not found in S3")
-                return pdf_urls
-        
-        # Parse content to extract PDF URLs
-        for line in content.split('\n'):
-            line = line.strip()
-            # Skip comments and empty lines
-            if line and not line.startswith('#') and line.startswith('http'):
-                # Check if it's a PDF URL
-                if line.lower().endswith('.pdf'):
-                    pdf_urls.append(line)
-                    logger.info(f"Found PDF URL: {line}")
-        
-        logger.info(f"Extracted {len(pdf_urls)} PDF URLs from urls.txt")
-        
-    except Exception as e:
-        logger.error(f"Failed to read PDF URLs from file: {str(e)}")
-    
-    return pdf_urls
-
 def process_manual_pdfs_from_s3() -> Dict[str, Any]:
     """
     Process any PDF files that were manually uploaded to the data-sources/ folder
@@ -310,139 +236,45 @@ def process_manual_pdfs_from_s3() -> Dict[str, Any]:
     
     return results
 
-def get_website_urls_from_file() -> List[str]:
+def get_pdf_urls_from_file() -> List[str]:
     """
-    Read website URLs from urls.txt file in S3
-    Note: These URLs are handled by Web Crawler data source automatically
+    Read PDF URLs from urls.txt file in S3 or from local data-sources folder
     """
-    website_urls = []
+    pdf_urls = []
     
     try:
-        # Try to read from S3
+        # First try to read from S3 (uploaded during deployment)
         try:
             response = s3_client.get_object(Bucket=DOCUMENTS_BUCKET, Key='data-sources/urls.txt')
             content = response['Body'].read().decode('utf-8')
+            logger.info("Successfully read urls.txt from S3")
         except s3_client.exceptions.NoSuchKey:
+            # Fallback: try reading from documents/ prefix
             try:
                 response = s3_client.get_object(Bucket=DOCUMENTS_BUCKET, Key='documents/urls.txt')
                 content = response['Body'].read().decode('utf-8')
+                logger.info("Successfully read urls.txt from S3 documents/ prefix")
             except s3_client.exceptions.NoSuchKey:
                 logger.error("urls.txt file not found in S3")
-                return website_urls
+                return pdf_urls
         
-        # Parse content to extract website URLs
+        # Parse content to extract PDF URLs
         for line in content.split('\n'):
             line = line.strip()
             # Skip comments and empty lines
             if line and not line.startswith('#') and line.startswith('http'):
-                # Check if it's NOT a PDF URL (website URL)
-                if not line.lower().endswith('.pdf'):
-                    website_urls.append(line)
-                    logger.info(f"Found website URL: {line}")
+                # Check if it's a PDF URL
+                if line.lower().endswith('.pdf'):
+                    pdf_urls.append(line)
+                    logger.info(f"Found PDF URL: {line}")
         
-        logger.info(f"Extracted {len(website_urls)} website URLs from urls.txt")
+        logger.info(f"Extracted {len(pdf_urls)} PDF URLs from urls.txt")
         
     except Exception as e:
-        logger.error(f"Failed to read website URLs from file: {str(e)}")
+        logger.error(f"Failed to read PDF URLs from file: {str(e)}")
     
-    return website_urls
+    return pdf_urls
 
-def scrape_webpage(url: str) -> str:
-    """
-    Scrape content from a webpage
-    """
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        
-        response = requests.get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        
-        # Parse HTML content
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Remove script and style elements
-        for script in soup(["script", "style", "nav", "footer", "header"]):
-            script.decompose()
-        
-        # Extract text content
-        text = soup.get_text()
-        
-        # Clean up text
-        lines = (line.strip() for line in text.splitlines())
-        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-        text = ' '.join(chunk for chunk in chunks if chunk)
-        
-        return text
-        
-    except Exception as e:
-        logger.error(f"Error scraping {url}: {str(e)}")
-        return ""
-
-def get_url_filename(url: str) -> str:
-    """
-    Generate a safe filename from URL
-    """
-    parsed = urllib.parse.urlparse(url)
-    filename = parsed.netloc + parsed.path
-    filename = filename.replace('/', '_').replace('.', '_')
-    return filename[:100]  # Limit length
-
-def extract_title_from_content(content: str) -> str:
-    """
-    Extract a title from content (first meaningful line)
-    """
-    lines = content.split('\n')
-    for line in lines:
-        line = line.strip()
-        if len(line) > 10 and len(line) < 100:
-            return line
-    return "Document"
-
-def save_to_s3(content: str, key: str, metadata: Dict[str, str]) -> None:
-    """
-    Save content to S3 with metadata
-    """
-    try:
-        s3_client.put_object(
-            Bucket=DOCUMENTS_BUCKET,
-            Key=key,
-            Body=content.encode('utf-8'),
-            ContentType='text/plain',
-            Metadata=metadata
-        )
-        logger.info(f"Saved to S3: s3://{DOCUMENTS_BUCKET}/{key}")
-        
-    except Exception as e:
-        logger.error(f"Failed to save to S3: {str(e)}")
-        raise
-
-def start_ingestion_job(data_source_id: str = None, description: str = None) -> Dict[str, Any]:
-    """
-    Start Knowledge Base ingestion job for specified data source
-    """
-    try:
-        # Use provided data source ID or fall back to default
-        ds_id = data_source_id or DATA_SOURCE_ID
-        desc = description or f"Automated ingestion job - {datetime.utcnow().isoformat()}"
-        
-        logger.info(f"Starting ingestion job for Knowledge Base: {KNOWLEDGE_BASE_ID}, Data Source: {ds_id}")
-        
-        response = bedrock_agent.start_ingestion_job(
-            knowledgeBaseId=KNOWLEDGE_BASE_ID,
-            dataSourceId=ds_id,
-            description=desc
-        )
-        
-        job_id = response.get('ingestionJob', {}).get('ingestionJobId')
-        logger.info(f"Started ingestion job: {job_id}")
-        
-        return response.get('ingestionJob', {})
-        
-    except Exception as e:
-        logger.error(f"Failed to start ingestion job: {str(e)}")
-        return {}
 def download_pdf(url: str) -> bytes:
     """
     Download PDF content from URL
@@ -484,6 +316,15 @@ def save_pdf_to_s3(pdf_content: bytes, key: str, metadata: Dict[str, str]) -> No
         logger.error(f"Failed to save PDF to S3: {str(e)}")
         raise
 
+def get_url_filename(url: str) -> str:
+    """
+    Generate a safe filename from URL
+    """
+    parsed = urllib.parse.urlparse(url)
+    filename = parsed.netloc + parsed.path
+    filename = filename.replace('/', '_').replace('.', '_')
+    return filename[:100]  # Limit length
+
 def extract_title_from_url(url: str) -> str:
     """
     Extract a meaningful title from PDF URL
@@ -499,110 +340,28 @@ def extract_title_from_url(url: str) -> str:
     except:
         return "Blood Centers Document"
 
-def validate_urls_file() -> Dict[str, Any]:
+def start_ingestion_job(data_source_id: str = None, description: str = None) -> Dict[str, Any]:
     """
-    Validate and analyze the urls.txt file
+    Start Knowledge Base ingestion job for specified data source
     """
-    validation_results = {
-        'total_urls': 0,
-        'website_urls': 0,
-        'pdf_urls': 0,
-        'invalid_urls': 0,
-        'comments': 0
-    }
-    
     try:
-        # Read urls.txt from S3
-        try:
-            response = s3_client.get_object(Bucket=DOCUMENTS_BUCKET, Key='data-sources/urls.txt')
-            content = response['Body'].read().decode('utf-8')
-        except s3_client.exceptions.NoSuchKey:
-            try:
-                response = s3_client.get_object(Bucket=DOCUMENTS_BUCKET, Key='documents/urls.txt')
-                content = response['Body'].read().decode('utf-8')
-            except s3_client.exceptions.NoSuchKey:
-                logger.error("urls.txt file not found in S3")
-                return validation_results
+        # Use provided data source ID or fall back to default
+        ds_id = data_source_id or DATA_SOURCE_ID
+        desc = description or f"Automated ingestion job - {datetime.utcnow().isoformat()}"
         
-        # Analyze content
-        for line in content.split('\n'):
-            line = line.strip()
-            
-            if not line:
-                continue
-            elif line.startswith('#'):
-                validation_results['comments'] += 1
-            elif line.startswith('http'):
-                validation_results['total_urls'] += 1
-                if line.lower().endswith('.pdf'):
-                    validation_results['pdf_urls'] += 1
-                else:
-                    validation_results['website_urls'] += 1
-            else:
-                validation_results['invalid_urls'] += 1
+        logger.info(f"Starting ingestion job for Knowledge Base: {KNOWLEDGE_BASE_ID}, Data Source: {ds_id}")
         
-        logger.info(f"URLs file validation: {validation_results}")
-        
-    except Exception as e:
-        logger.error(f"Failed to validate URLs file: {str(e)}")
-    
-    return validation_results
-
-def process_existing_s3_files() -> Dict[str, Any]:
-    """
-    Process any existing files in the S3 bucket (uploaded manually)
-    """
-    results = {'processed': [], 'failed': []}
-    
-    try:
-        # List objects in the documents/ prefix
-        response = s3_client.list_objects_v2(
-            Bucket=DOCUMENTS_BUCKET,
-            Prefix='documents/'
+        response = bedrock_agent.start_ingestion_job(
+            knowledgeBaseId=KNOWLEDGE_BASE_ID,
+            dataSourceId=ds_id,
+            description=desc
         )
         
-        for obj in response.get('Contents', []):
-            key = obj['Key']
-            
-            # Skip if it's a directory or already processed file
-            if key.endswith('/') or '/processed/' in key:
-                continue
-            
-            try:
-                # Get object metadata
-                obj_response = s3_client.head_object(Bucket=DOCUMENTS_BUCKET, Key=key)
-                
-                # If it doesn't have processing metadata, it's a new file
-                if 'processed' not in obj_response.get('Metadata', {}):
-                    logger.info(f"Processing existing file: {key}")
-                    
-                    # Add processing metadata
-                    s3_client.copy_object(
-                        Bucket=DOCUMENTS_BUCKET,
-                        CopySource={'Bucket': DOCUMENTS_BUCKET, 'Key': key},
-                        Key=key,
-                        Metadata={
-                            **obj_response.get('Metadata', {}),
-                            'processed': 'true',
-                            'processed_date': datetime.utcnow().isoformat()
-                        },
-                        MetadataDirective='REPLACE'
-                    )
-                    
-                    results['processed'].append({
-                        'key': key,
-                        'size': obj['Size'],
-                        'last_modified': obj['LastModified'].isoformat()
-                    })
-                
-            except Exception as e:
-                logger.error(f"Failed to process {key}: {str(e)}")
-                results['failed'].append({
-                    'key': key,
-                    'error': str(e)
-                })
+        job_id = response.get('ingestionJob', {}).get('ingestionJobId')
+        logger.info(f"Started ingestion job: {job_id}")
+        
+        return response.get('ingestionJob', {})
         
     except Exception as e:
-        logger.error(f"Failed to list S3 objects: {str(e)}")
-    
-    return results
+        logger.error(f"Failed to start ingestion job: {str(e)}")
+        return {}
