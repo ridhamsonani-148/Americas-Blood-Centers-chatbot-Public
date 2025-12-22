@@ -206,11 +206,23 @@ phases:
           echo "🔍 Debug: KB Role Name: $KB_ROLE_NAME"
           echo "🔍 Debug: KB Role ARN: $KB_ROLE_ARN"
           
+          # Get current policy version
+          echo "Getting current data access policy version..."
+          POLICY_VERSION=$(aws opensearchserverless get-access-policy \
+            --name "${PROJECT_NAME}-data-access-policy" \
+            --type data \
+            --region "$CDK_DEFAULT_REGION" \
+            --query 'accessPolicyDetail.policyVersion' \
+            --output text)
+          
+          echo "🔍 Debug: Current policy version: $POLICY_VERSION"
+          
           # Update the data access policy to include the Knowledge Base role
           echo "Updating data access policy to include Knowledge Base role..."
           aws opensearchserverless update-access-policy \
             --name "${PROJECT_NAME}-data-access-policy" \
             --type data \
+            --policy-version "$POLICY_VERSION" \
             --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"Permission":["aoss:CreateCollectionItems","aoss:DeleteCollectionItems","aoss:UpdateCollectionItems","aoss:DescribeCollectionItems"],"ResourceType":"collection"},{"Resource":["index/'$COLLECTION_NAME'/*"],"Permission":["aoss:CreateIndex","aoss:DeleteIndex","aoss:UpdateIndex","aoss:DescribeIndex","aoss:ReadDocument","aoss:WriteDocument"],"ResourceType":"index"}],"Principal":["arn:aws:iam::'$AWS_ACCOUNT_ID':root","'$KB_ROLE_ARN'"]}]' \
             --region "$CDK_DEFAULT_REGION" && echo "✓ Data access policy updated with Knowledge Base role"
           
