@@ -81,7 +81,7 @@ phases:
           
           # Step 3: Create OpenSearch Serverless Collection
           echo "Step 3: Creating OpenSearch Serverless collection..."
-          COLLECTION_NAME="${PROJECT_NAME}-vectors"
+          COLLECTION_NAME="${PROJECT_NAME}-kb"
           
           # Check if collection already exists
           COLLECTION_ARN=$(aws opensearchserverless list-collections \

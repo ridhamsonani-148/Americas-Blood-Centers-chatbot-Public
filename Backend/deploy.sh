@@ -12,9 +12,9 @@ clean_url=${GITHUB_URL%.git}
 clean_url=${clean_url%/}
 
 if [ -z "${PROJECT_NAME:-}" ]; then
-  read -rp "Enter project name [default: americas-blood-centers-bedrock]: " PROJECT_NAME
+  read -rp "Enter project name [default: americas-blood-centers]: " PROJECT_NAME
   PROJECT_NAME=${PROJECT_NAME:-americas-blood-centers-bedrock}
-fi
+fi``
 
 if [ -z "${MODEL_ID:-}" ]; then
   read -rp "Enter Bedrock model ID [default: anthropic.claude-3-haiku-20240307-v1:0]: " MODEL_ID
