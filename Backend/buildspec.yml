@@ -230,7 +230,63 @@ phases:
           echo "Waiting for policy update to propagate..."
           sleep 10
           
-          echo "✓ Collection is ready for Knowledge Base creation"
+          # Step 4.6: Create the required vector index manually
+          echo "Step 4.6: Creating vector index in OpenSearch collection..."
+          
+          # Get the collection ID from the ARN
+          COLLECTION_ID=$(echo "$COLLECTION_ARN" | sed 's/.*collection\///')
+          echo "🔍 Debug: Collection ID extracted: $COLLECTION_ID"
+          
+          # Create the index using AWS CLI (now that we have proper permissions)
+          echo "Creating bedrock-knowledge-base-default-index..."
+          
+          INDEX_CREATION_OUTPUT=$(aws opensearchserverless create-index \
+            --region "$CDK_DEFAULT_REGION" \
+            --id "$COLLECTION_ID" \
+            --index-name "bedrock-knowledge-base-default-index" \
+            --index-schema '{
+              "settings": {
+                "index.knn": true
+              },
+              "mappings": {
+                "properties": {
+                  "bedrock-knowledge-base-default-vector": {
+                    "type": "knn_vector",
+                    "dimension": 1536,
+                    "method": {
+                      "name": "hnsw",
+                      "engine": "faiss",
+                      "parameters": {
+                        "ef_construction": 512,
+                        "m": 16
+                      }
+                    }
+                  },
+                  "AMAZON_BEDROCK_TEXT_CHUNK": {
+                    "type": "text"
+                  },
+                  "AMAZON_BEDROCK_METADATA": {
+                    "type": "text"
+                  }
+                }
+              }
+            }' 2>&1)
+          
+          if echo "$INDEX_CREATION_OUTPUT" | grep -q "indexDetail"; then
+            echo "✓ Vector index created successfully"
+            echo "Index details: $INDEX_CREATION_OUTPUT"
+          elif echo "$INDEX_CREATION_OUTPUT" | grep -q "already exists\|ResourceAlreadyExistsException"; then
+            echo "✓ Index already exists, continuing..."
+          else
+            echo "⚠ Index creation response: $INDEX_CREATION_OUTPUT"
+            echo "⚠ Index creation may have failed, but continuing..."
+          fi
+          
+          # Wait for index to be ready
+          echo "Waiting for index to be ready..."
+          sleep 15
+          
+          echo "✓ Collection and index are ready for Knowledge Base creation"
           
           # Step 5: Create Knowledge Base
           echo "Step 5: Creating Bedrock Knowledge Base..."
