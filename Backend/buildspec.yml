@@ -13,7 +13,7 @@ phases:
       - echo "Checking AWS permissions..."
       - aws sts get-caller-identity
       - echo "Checking Bedrock model availability..."
-      - aws bedrock list-foundation-models --region ${CDK_DEFAULT_REGION:-us-east-1} --query 'modelSummaries[?contains(modelId, `claude-3-haiku`) || contains(modelId, `titan-embed`)].{ModelId:modelId,Status:modelLifecycle.status}' --output table || echo "Warning: Could not list Bedrock models"
+      - aws bedrock list-foundation-models --region ${CDK_DEFAULT_REGION:-us-east-1} --query "modelSummaries[?contains(modelId, 'claude-3-haiku') || contains(modelId, 'titan-embed')].{ModelId:modelId,Status:modelLifecycle.status}" --output table || echo "Warning: Could not list Bedrock models"
 
   pre_build:
     commands:
