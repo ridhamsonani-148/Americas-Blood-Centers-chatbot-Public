@@ -82,6 +82,9 @@ phases:
           # Step 3: Create OpenSearch Serverless Collection
           echo "Step 3: Creating OpenSearch Serverless collection..."
           COLLECTION_NAME="${PROJECT_NAME}-kb"
+          echo "🔍 Debug: PROJECT_NAME='$PROJECT_NAME'"
+          echo "🔍 Debug: COLLECTION_NAME='$COLLECTION_NAME'"
+          echo "🔍 Debug: Collection name length: ${#COLLECTION_NAME}"
           
           # Check if collection already exists
           COLLECTION_ARN=$(aws opensearchserverless list-collections \
@@ -96,27 +99,39 @@ phases:
             
             # Create network security policy (ignore errors if exists)
             echo "Creating network security policy..."
-            aws opensearchserverless create-security-policy \
+            if aws opensearchserverless create-security-policy \
               --name "${PROJECT_NAME}-network-policy" \
               --type network \
               --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"ResourceType":"collection"}],"AllowFromPublic":true}]' \
-              --region "$CDK_DEFAULT_REGION" 2>/dev/null || echo "Network policy may already exist"
+              --region "$CDK_DEFAULT_REGION" >/dev/null 2>&1; then
+              echo "✓ Network security policy created"
+            else
+              echo "⚠ Network policy may already exist or failed to create"
+            fi
             
             # Create encryption security policy (ignore errors if exists)
             echo "Creating encryption security policy..."
-            aws opensearchserverless create-security-policy \
+            if aws opensearchserverless create-security-policy \
               --name "${PROJECT_NAME}-encryption-policy" \
               --type encryption \
               --policy '{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"ResourceType":"collection"}],"AWSOwnedKey":true}' \
-              --region "$CDK_DEFAULT_REGION" 2>/dev/null || echo "Encryption policy may already exist"
+              --region "$CDK_DEFAULT_REGION" >/dev/null 2>&1; then
+              echo "✓ Encryption security policy created"
+            else
+              echo "⚠ Encryption policy may already exist or failed to create"
+            fi
             
             # Create data access policy (ignore errors if exists)
             echo "Creating data access policy..."
-            aws opensearchserverless create-access-policy \
+            if aws opensearchserverless create-access-policy \
               --name "${PROJECT_NAME}-data-access-policy" \
               --type data \
               --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"Permission":["aoss:CreateCollectionItems","aoss:DeleteCollectionItems","aoss:UpdateCollectionItems","aoss:DescribeCollectionItems"],"ResourceType":"collection"},{"Resource":["index/'$COLLECTION_NAME'/*"],"Permission":["aoss:CreateIndex","aoss:DeleteIndex","aoss:UpdateIndex","aoss:DescribeIndex","aoss:ReadDocument","aoss:WriteDocument"],"ResourceType":"index"}],"Principal":["'$AWS_ACCOUNT_ID'"]}]' \
-              --region "$CDK_DEFAULT_REGION" 2>/dev/null || echo "Data access policy may already exist"
+              --region "$CDK_DEFAULT_REGION" >/dev/null 2>&1; then
+              echo "✓ Data access policy created"
+            else
+              echo "⚠ Data access policy may already exist or failed to create"
+            fi
             
             # Wait for policies to propagate
             echo "Waiting for policies to propagate..."
