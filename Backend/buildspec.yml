@@ -212,6 +212,9 @@ phases:
             --id "$COLLECTION_ID" \
             --index-name "bedrock-knowledge-base-default-index" \
             --index-schema '{
+              "settings": {
+                "index.knn": true
+              },
               "mappings": {
                 "properties": {
                   "bedrock-knowledge-base-default-vector": {
