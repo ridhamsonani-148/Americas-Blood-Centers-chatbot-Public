@@ -239,7 +239,11 @@ phases:
           
           # Create the index using AWS CLI (now that we have proper permissions)
           echo "Creating bedrock-knowledge-base-default-index..."
+          echo "🔍 Debug: Using collection ID: $COLLECTION_ID"
+          echo "🔍 Debug: Region: $CDK_DEFAULT_REGION"
           
+          # Try to create the index and capture both stdout and stderr
+          set +e  # Temporarily disable exit on error
           INDEX_CREATION_OUTPUT=$(aws opensearchserverless create-index \
             --region "$CDK_DEFAULT_REGION" \
             --id "$COLLECTION_ID" \
@@ -271,6 +275,11 @@ phases:
                 }
               }
             }' 2>&1)
+          INDEX_EXIT_CODE=$?
+          set -e  # Re-enable exit on error
+          
+          echo "🔍 Debug: Index creation exit code: $INDEX_EXIT_CODE"
+          echo "🔍 Debug: Index creation output: $INDEX_CREATION_OUTPUT"
           
           if echo "$INDEX_CREATION_OUTPUT" | grep -q "indexDetail"; then
             echo "✓ Vector index created successfully"
