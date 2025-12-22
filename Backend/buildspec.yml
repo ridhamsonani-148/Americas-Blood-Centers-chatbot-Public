@@ -81,21 +81,15 @@ phases:
           
           # Step 3: Create OpenSearch Serverless Collection
           echo "Step 3: Creating OpenSearch Serverless collection..."
-          COLLECTION_NAME="${PROJECT_NAME}-vs"
+          # Add timestamp to ensure unique collection name
+          TIMESTAMP=$(date +%s)
+          COLLECTION_NAME="${PROJECT_NAME}-kb-${TIMESTAMP}"
           echo "🔍 Debug: PROJECT_NAME='$PROJECT_NAME'"
           echo "🔍 Debug: COLLECTION_NAME='$COLLECTION_NAME'"
           echo "🔍 Debug: Collection name length: ${#COLLECTION_NAME}"
           
-          # Check if collection already exists
-          COLLECTION_ARN=$(aws opensearchserverless list-collections \
-            --region "$CDK_DEFAULT_REGION" \
-            --query "collectionSummaries[?name=='$COLLECTION_NAME'].arn | [0]" \
-            --output text 2>/dev/null || echo "")
-          
-          if [ -n "$COLLECTION_ARN" ] && [ "$COLLECTION_ARN" != "None" ] && [ "$COLLECTION_ARN" != "null" ]; then
-            echo "✓ Found existing collection: $COLLECTION_ARN"
-          else
-            echo "Creating OpenSearch Serverless policies..."
+          # Always create a new collection with unique name to avoid permission issues
+          echo "Creating new OpenSearch Serverless collection with proper permissions..."
             
             # Create network security policy (only if it doesn't exist)
             echo "Creating network security policy..."
@@ -124,10 +118,14 @@ phases:
             # Create data access policy (only if it doesn't exist)
             echo "Creating data access policy..."
             if ! aws opensearchserverless get-access-policy --name "${PROJECT_NAME}-data-access-policy" --type data --region "$CDK_DEFAULT_REGION" >/dev/null 2>&1; then
+              # Get CodeBuild role ARN for access policy
+              CODEBUILD_ROLE_ARN=$(aws sts get-caller-identity --query Arn --output text | sed 's/:user\//:role\//' | sed 's/\/[^\/]*$/\/codebuild-service-role/')
+              echo "🔍 Debug: CodeBuild role ARN: $CODEBUILD_ROLE_ARN"
+              
               aws opensearchserverless create-access-policy \
                 --name "${PROJECT_NAME}-data-access-policy" \
                 --type data \
-                --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"Permission":["aoss:CreateCollectionItems","aoss:DeleteCollectionItems","aoss:UpdateCollectionItems","aoss:DescribeCollectionItems"],"ResourceType":"collection"},{"Resource":["index/'$COLLECTION_NAME'/*"],"Permission":["aoss:CreateIndex","aoss:DeleteIndex","aoss:UpdateIndex","aoss:DescribeIndex","aoss:ReadDocument","aoss:WriteDocument"],"ResourceType":"index"}],"Principal":["arn:aws:iam::'$AWS_ACCOUNT_ID':root"]}]' \
+                --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"Permission":["aoss:CreateCollectionItems","aoss:DeleteCollectionItems","aoss:UpdateCollectionItems","aoss:DescribeCollectionItems"],"ResourceType":"collection"},{"Resource":["index/'$COLLECTION_NAME'/*"],"Permission":["aoss:CreateIndex","aoss:DeleteIndex","aoss:UpdateIndex","aoss:DescribeIndex","aoss:ReadDocument","aoss:WriteDocument"],"ResourceType":"index"}],"Principal":["arn:aws:iam::'$AWS_ACCOUNT_ID':root","'$CODEBUILD_ROLE_ARN'"]}]' \
                 --region "$CDK_DEFAULT_REGION" && echo "✓ Data access policy created"
             else
               echo "✓ Data access policy already exists"
