@@ -127,7 +127,7 @@ phases:
               aws opensearchserverless create-access-policy \
                 --name "${PROJECT_NAME}-data-access-policy" \
                 --type data \
-                --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"Permission":["aoss:CreateCollectionItems","aoss:DeleteCollectionItems","aoss:UpdateCollectionItems","aoss:DescribeCollectionItems"],"ResourceType":"collection"},{"Resource":["index/'$COLLECTION_NAME'/*"],"Permission":["aoss:CreateIndex","aoss:DeleteIndex","aoss:UpdateIndex","aoss:DescribeIndex","aoss:ReadDocument","aoss:WriteDocument"],"ResourceType":"index"}],"Principal":["'$AWS_ACCOUNT_ID'"]}]' \
+                --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"Permission":["aoss:CreateCollectionItems","aoss:DeleteCollectionItems","aoss:UpdateCollectionItems","aoss:DescribeCollectionItems"],"ResourceType":"collection"},{"Resource":["index/'$COLLECTION_NAME'/*"],"Permission":["aoss:CreateIndex","aoss:DeleteIndex","aoss:UpdateIndex","aoss:DescribeIndex","aoss:ReadDocument","aoss:WriteDocument"],"ResourceType":"index"}],"Principal":["arn:aws:iam::'$AWS_ACCOUNT_ID':root"]}]' \
                 --region "$CDK_DEFAULT_REGION" && echo "✓ Data access policy created"
             else
               echo "✓ Data access policy already exists"
