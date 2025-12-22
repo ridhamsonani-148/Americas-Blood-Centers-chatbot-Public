@@ -202,12 +202,16 @@ phases:
           # Step 4.5: Create the required index in the OpenSearch collection
           echo "Step 4.5: Creating vector index in OpenSearch collection..."
           
-          # Use AWS CLI to create the index directly (much simpler than Python approach)
+          # Get the collection ID (not name) from the ARN
+          COLLECTION_ID=$(echo "$COLLECTION_ARN" | sed 's/.*collection\///')
+          echo "🔍 Debug: Collection ID extracted: $COLLECTION_ID"
+          
+          # Use AWS CLI to create the index directly
           echo "Creating bedrock-knowledge-base-default-index using AWS CLI..."
           
           INDEX_CREATION_OUTPUT=$(aws opensearchserverless create-index \
             --region "$CDK_DEFAULT_REGION" \
-            --id "$COLLECTION_NAME" \
+            --id "$COLLECTION_ID" \
             --index-name "bedrock-knowledge-base-default-index" \
             --index-schema '{
               "mappings": {
