@@ -81,7 +81,7 @@ phases:
           
           # Step 3: Create OpenSearch Serverless Collection
           echo "Step 3: Creating OpenSearch Serverless collection..."
-          COLLECTION_NAME="${PROJECT_NAME}-kb"
+          COLLECTION_NAME="${PROJECT_NAME}-vs"
           echo "🔍 Debug: PROJECT_NAME='$PROJECT_NAME'"
           echo "🔍 Debug: COLLECTION_NAME='$COLLECTION_NAME'"
           echo "🔍 Debug: Collection name length: ${#COLLECTION_NAME}"

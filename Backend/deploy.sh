@@ -13,7 +13,7 @@ clean_url=${clean_url%/}
 
 if [ -z "${PROJECT_NAME:-}" ]; then
   read -rp "Enter project name [default: americas-blood-centers]: " PROJECT_NAME
-  PROJECT_NAME=${PROJECT_NAME:-americas-blood-centers-bedrock}
+  PROJECT_NAME=${PROJECT_NAME:-americas-blood-centers}
 fi
 
 if [ -z "${MODEL_ID:-}" ]; then
