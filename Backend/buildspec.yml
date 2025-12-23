@@ -329,6 +329,15 @@ phases:
           fi
           
           echo "Creating new Bedrock Knowledge Base with supplemental storage..."
+          echo "🔍 Debug: KB Role ARN: $KB_ROLE_ARN"
+          echo "🔍 Debug: Collection ARN: $COLLECTION_ARN"
+          echo "🔍 Debug: Supplemental Bucket: $SUPPLEMENTAL_BUCKET"
+          echo "🔍 Debug: Region: $CDK_DEFAULT_REGION"
+          echo "🔍 Debug: Embedding Model: $EMBEDDING_MODEL_ID"
+          
+          # Try to create Knowledge Base with detailed error capture
+          set +e  # Temporarily disable exit on error
+          echo "Executing create-knowledge-base command..."
           KB_CREATE_OUTPUT=$(aws bedrock-agent create-knowledge-base \
             --name "${PROJECT_NAME}-knowledge-base" \
             --description "Knowledge base for America's Blood Centers chatbot with BDA parsing" \
@@ -362,15 +371,32 @@ phases:
               ]
             }' \
             --region "$CDK_DEFAULT_REGION" 2>&1)
+          KB_EXIT_CODE=$?
+          set -e  # Re-enable exit on error
           
-          if [ $? -eq 0 ]; then
+          echo "Command completed."
+          echo "🔍 Debug: KB creation exit code: $KB_EXIT_CODE"
+          echo "🔍 Debug: KB creation output length: ${#KB_CREATE_OUTPUT}"
+          echo "🔍 Debug: KB creation output: $KB_CREATE_OUTPUT"
+          
+          if [ $KB_EXIT_CODE -eq 0 ]; then
             KB_ID=$(echo "$KB_CREATE_OUTPUT" | jq -r '.knowledgeBase.knowledgeBaseId // empty')
-            echo "✓ Knowledge Base created with supplemental storage: $KB_ID"
+            if [ -n "$KB_ID" ] && [ "$KB_ID" != "null" ] && [ "$KB_ID" != "empty" ]; then
+              echo "✓ Knowledge Base created with supplemental storage: $KB_ID"
+            else
+              echo "⚠ Knowledge Base creation succeeded but couldn't extract ID"
+              echo "Full output: $KB_CREATE_OUTPUT"
+              # Try to extract ID differently
+              KB_ID=$(echo "$KB_CREATE_OUTPUT" | grep -o '"knowledgeBaseId":"[^"]*"' | cut -d'"' -f4)
+              echo "Extracted KB ID: $KB_ID"
+            fi
           else
             echo "✗ Failed to create Knowledge Base with supplemental storage"
-            echo "Error: $KB_CREATE_OUTPUT"
+            echo "Exit code: $KB_EXIT_CODE"
+            echo "Error output: $KB_CREATE_OUTPUT"
             echo "Collection ARN: $COLLECTION_ARN"
             echo "KB Role ARN: $KB_ROLE_ARN"
+            echo "Supplemental Bucket: $SUPPLEMENTAL_BUCKET"
             exit 1
           fi
           
