@@ -345,7 +345,17 @@ phases:
             --knowledge-base-configuration '{
               "type": "VECTOR",
               "vectorKnowledgeBaseConfiguration": {
-                "embeddingModelArn": "arn:aws:bedrock:'"$CDK_DEFAULT_REGION"'::foundation-model/'"$EMBEDDING_MODEL_ID"'"
+                "embeddingModelArn": "arn:aws:bedrock:'"$CDK_DEFAULT_REGION"'::foundation-model/'"$EMBEDDING_MODEL_ID"'",
+                "supplementalDataStorageConfiguration": {
+                  "storageLocations": [
+                    {
+                      "type": "S3",
+                      "s3Location": {
+                        "uri": "s3://'"$SUPPLEMENTAL_BUCKET"'/parsed-content/"
+                      }
+                    }
+                  ]
+                }
               }
             }' \
             --storage-configuration '{
@@ -360,16 +370,6 @@ phases:
                 }
               }
             }' \
-            --supplemental-data-storage-configuration '{
-              "storageLocations": [
-                {
-                  "type": "S3",
-                  "s3Location": {
-                    "uri": "s3://'"$SUPPLEMENTAL_BUCKET"'/parsed-content/"
-                  }
-                }
-              ]
-            }' \
             --region "$CDK_DEFAULT_REGION" 2>&1)
           KB_EXIT_CODE=$?
           set -e  # Re-enable exit on error
@@ -383,6 +383,8 @@ phases:
             KB_ID=$(echo "$KB_CREATE_OUTPUT" | jq -r '.knowledgeBase.knowledgeBaseId // empty')
             if [ -n "$KB_ID" ] && [ "$KB_ID" != "null" ] && [ "$KB_ID" != "empty" ]; then
               echo "✓ Knowledge Base created with supplemental storage: $KB_ID"
+              echo "✓ Supplemental storage configured: s3://$SUPPLEMENTAL_BUCKET/parsed-content/"
+              echo "✓ Ready for Bedrock Data Automation parsing of PDFs"
             else
               echo "⚠ Knowledge Base creation succeeded but couldn't extract ID"
               echo "Full output: $KB_CREATE_OUTPUT"
