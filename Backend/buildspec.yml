@@ -297,8 +297,20 @@ phases:
           
           echo "✓ Collection and index are ready for Knowledge Base creation"
           
-          # Step 5: Create Knowledge Base
-          echo "Step 5: Creating Bedrock Knowledge Base..."
+          # Step 5: Create Knowledge Base with Supplemental Data Storage
+          echo "Step 5: Creating Bedrock Knowledge Base with supplemental storage..."
+          
+          # Create supplemental data storage bucket
+          SUPPLEMENTAL_BUCKET="${PROJECT_NAME}-supplemental-${AWS_ACCOUNT_ID}-${CDK_DEFAULT_REGION}"
+          echo "Creating supplemental data storage bucket: $SUPPLEMENTAL_BUCKET"
+          
+          if ! aws s3 ls "s3://$SUPPLEMENTAL_BUCKET" >/dev/null 2>&1; then
+            aws s3 mb "s3://$SUPPLEMENTAL_BUCKET" --region "$CDK_DEFAULT_REGION"
+            echo "✓ Supplemental storage bucket created: $SUPPLEMENTAL_BUCKET"
+          else
+            echo "✓ Supplemental storage bucket already exists: $SUPPLEMENTAL_BUCKET"
+          fi
+          
           KB_ID=$(aws bedrock-agent list-knowledge-bases \
             --region "$CDK_DEFAULT_REGION" \
             --query "knowledgeBaseSummaries[?name=='${PROJECT_NAME}-knowledge-base'].knowledgeBaseId | [0]" \
@@ -306,42 +318,60 @@ phases:
           
           if [ -n "$KB_ID" ] && [ "$KB_ID" != "None" ] && [ "$KB_ID" != "null" ]; then
             echo "✓ Found existing Knowledge Base: $KB_ID"
-          else
-            echo "Creating new Bedrock Knowledge Base..."
-            KB_CREATE_OUTPUT=$(aws bedrock-agent create-knowledge-base \
-              --name "${PROJECT_NAME}-knowledge-base" \
-              --description "Knowledge base for America's Blood Centers chatbot" \
-              --role-arn "$KB_ROLE_ARN" \
-              --knowledge-base-configuration '{
-                "type": "VECTOR",
-                "vectorKnowledgeBaseConfiguration": {
-                  "embeddingModelArn": "arn:aws:bedrock:'"$CDK_DEFAULT_REGION"'::foundation-model/'"$EMBEDDING_MODEL_ID"'"
+            echo "⚠ Deleting existing Knowledge Base to recreate with supplemental storage..."
+            aws bedrock-agent delete-knowledge-base \
+              --knowledge-base-id "$KB_ID" \
+              --region "$CDK_DEFAULT_REGION"
+            
+            # Wait for deletion to complete
+            echo "Waiting for Knowledge Base deletion..."
+            sleep 30
+          fi
+          
+          echo "Creating new Bedrock Knowledge Base with supplemental storage..."
+          KB_CREATE_OUTPUT=$(aws bedrock-agent create-knowledge-base \
+            --name "${PROJECT_NAME}-knowledge-base" \
+            --description "Knowledge base for America's Blood Centers chatbot with BDA parsing" \
+            --role-arn "$KB_ROLE_ARN" \
+            --knowledge-base-configuration '{
+              "type": "VECTOR",
+              "vectorKnowledgeBaseConfiguration": {
+                "embeddingModelArn": "arn:aws:bedrock:'"$CDK_DEFAULT_REGION"'::foundation-model/'"$EMBEDDING_MODEL_ID"'"
+              }
+            }' \
+            --storage-configuration '{
+              "type": "OPENSEARCH_SERVERLESS",
+              "opensearchServerlessConfiguration": {
+                "collectionArn": "'"$COLLECTION_ARN"'",
+                "vectorIndexName": "bedrock-knowledge-base-default-index",
+                "fieldMapping": {
+                  "vectorField": "bedrock-knowledge-base-default-vector",
+                  "textField": "AMAZON_BEDROCK_TEXT_CHUNK",
+                  "metadataField": "AMAZON_BEDROCK_METADATA"
                 }
-              }' \
-              --storage-configuration '{
-                "type": "OPENSEARCH_SERVERLESS",
-                "opensearchServerlessConfiguration": {
-                  "collectionArn": "'"$COLLECTION_ARN"'",
-                  "vectorIndexName": "bedrock-knowledge-base-default-index",
-                  "fieldMapping": {
-                    "vectorField": "bedrock-knowledge-base-default-vector",
-                    "textField": "AMAZON_BEDROCK_TEXT_CHUNK",
-                    "metadataField": "AMAZON_BEDROCK_METADATA"
+              }
+            }' \
+            --supplemental-data-storage-configuration '{
+              "storageLocations": [
+                {
+                  "type": "S3",
+                  "s3Location": {
+                    "uri": "s3://'"$SUPPLEMENTAL_BUCKET"'/parsed-content/"
                   }
                 }
-              }' \
-              --region "$CDK_DEFAULT_REGION" 2>&1)
-            
-            if [ $? -eq 0 ]; then
-              KB_ID=$(echo "$KB_CREATE_OUTPUT" | jq -r '.knowledgeBase.knowledgeBaseId // empty')
-              echo "✓ Knowledge Base created: $KB_ID"
-            else
-              echo "✗ Failed to create Knowledge Base"
-              echo "Error: $KB_CREATE_OUTPUT"
-              echo "Collection ARN: $COLLECTION_ARN"
-              echo "KB Role ARN: $KB_ROLE_ARN"
-              exit 1
-            fi
+              ]
+            }' \
+            --region "$CDK_DEFAULT_REGION" 2>&1)
+          
+          if [ $? -eq 0 ]; then
+            KB_ID=$(echo "$KB_CREATE_OUTPUT" | jq -r '.knowledgeBase.knowledgeBaseId // empty')
+            echo "✓ Knowledge Base created with supplemental storage: $KB_ID"
+          else
+            echo "✗ Failed to create Knowledge Base with supplemental storage"
+            echo "Error: $KB_CREATE_OUTPUT"
+            echo "Collection ARN: $COLLECTION_ARN"
+            echo "KB Role ARN: $KB_ROLE_ARN"
+            exit 1
           fi
           
           # Step 6: Create Data Sources (S3 for PDFs + Web Crawler for Websites)
@@ -453,6 +483,12 @@ phases:
                   "fixedSizeChunkingConfiguration": {
                     "maxTokens": 300,
                     "overlapPercentage": 20
+                  }
+                },
+                "parsingConfiguration": {
+                  "parsingStrategy": "BEDROCK_DATA_AUTOMATION",
+                  "bedrockDataAutomationConfiguration": {
+                    "parsingModality": "MULTIMODAL"
                   }
                 }
               }' \
