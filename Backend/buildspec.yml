@@ -382,7 +382,7 @@ phases:
                 "parsingConfiguration": {
                   "parsingStrategy": "BEDROCK_DATA_AUTOMATION",
                   "bedrockDataAutomationConfiguration": {
-                    "parsingPrompt": "Extract all text content from PDF documents, preserving structure and formatting. Focus on blood donation information, statistics, guidelines, and eligibility criteria."
+                    "parsingModality": "MULTIMODAL"
                   }
                 }
               }' \
