@@ -351,7 +351,7 @@ phases:
                     {
                       "type": "S3",
                       "s3Location": {
-                        "uri": "s3://'"$SUPPLEMENTAL_BUCKET"'/parsed-content/"
+                        "uri": "s3://'"$SUPPLEMENTAL_BUCKET"'"
                       }
                     }
                   ]
@@ -383,7 +383,7 @@ phases:
             KB_ID=$(echo "$KB_CREATE_OUTPUT" | jq -r '.knowledgeBase.knowledgeBaseId // empty')
             if [ -n "$KB_ID" ] && [ "$KB_ID" != "null" ] && [ "$KB_ID" != "empty" ]; then
               echo "✓ Knowledge Base created with supplemental storage: $KB_ID"
-              echo "✓ Supplemental storage configured: s3://$SUPPLEMENTAL_BUCKET/parsed-content/"
+              echo "✓ Supplemental storage configured: s3://$SUPPLEMENTAL_BUCKET/"
               echo "✓ Ready for Bedrock Data Automation parsing of PDFs"
             else
               echo "⚠ Knowledge Base creation succeeded but couldn't extract ID"
