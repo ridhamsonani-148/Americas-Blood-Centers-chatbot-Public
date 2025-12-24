@@ -593,16 +593,16 @@ phases:
                       "maxPages": 50
                     },
                     "exclusionFilters": [
-                      "*/wp-admin/*", 
-                      "*/login/*", 
-                      "*/admin/*",
-                      "*/wp-content/uploads/*"
+                      ".*/wp-admin/.*", 
+                      ".*/login/.*", 
+                      ".*/admin/.*",
+                      ".*/wp-content/uploads/.*"
                     ],
                     "inclusionFilters": [
-                      "*/for-donors/*", 
-                      "*/news/*", 
-                      "*/newsroom/*",
-                      "*/one-pagers-faqs/*"
+                      ".*/for-donors/.*", 
+                      ".*/news/.*", 
+                      ".*/newsroom/.*",
+                      ".*/one-pagers-faqs/.*"
                     ]
                   }
                 }
