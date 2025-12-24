@@ -40,6 +40,26 @@ export class BedrockChatbotStack extends cdk.Stack {
       ],
     });
 
+    // ===== S3 Bucket for Supplemental Data Storage (Bedrock Data Automation) =====
+    const supplementalBucket = new s3.Bucket(this, 'SupplementalBucket', {
+      bucketName: `${projectName}-supplemental-${this.account}-${this.region}`,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      versioned: false,
+      publicReadAccess: false,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+    });
+
+    // ===== S3 Bucket for Frontend Builds (Amplify) =====
+    const buildsBucket = new s3.Bucket(this, 'BuildsBucket', {
+      bucketName: `${projectName}-builds-${this.account}-${this.region}`,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      versioned: false,
+      publicReadAccess: false,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+    });
+
     // ===== Bedrock Knowledge Base Service Role =====
     const knowledgeBaseRole = new iam.Role(this, 'KnowledgeBaseRole', {
       assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
@@ -68,6 +88,21 @@ export class BedrockChatbotStack extends cdk.Stack {
               resources: [
                 documentsBucket.bucketArn,
                 `${documentsBucket.bucketArn}/*`,
+              ],
+            }),
+            // S3 access for supplemental data storage (Bedrock Data Automation)
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                's3:GetObject',
+                's3:PutObject',
+                's3:DeleteObject',
+                's3:ListBucket',
+                's3:GetBucketLocation',
+              ],
+              resources: [
+                supplementalBucket.bucketArn,
+                `${supplementalBucket.bucketArn}/*`,
               ],
             }),
             // OpenSearch Serverless access
@@ -312,6 +347,7 @@ export class BedrockChatbotStack extends cdk.Stack {
     });
 
     // ===== Deploy Initial Documents =====
+    // Deploy documents to both locations for different purposes
     new s3deploy.BucketDeployment(this, 'DeployDocuments', {
       sources: [s3deploy.Source.asset('./data-sources')],
       destinationBucket: documentsBucket,
@@ -319,6 +355,22 @@ export class BedrockChatbotStack extends cdk.Stack {
       include: ['*.txt', '*.pdf', '*.docx'],
       exclude: ['*.md'],
     });
+
+    // Deploy PDFs specifically to pdfs/ prefix for S3 Data Source
+    new s3deploy.BucketDeployment(this, 'DeployPDFs', {
+      sources: [s3deploy.Source.asset('./data-sources')],
+      destinationBucket: documentsBucket,
+      destinationKeyPrefix: 'pdfs/',
+      include: ['*.pdf'],
+      exclude: ['*.md', '*.txt', '*.docx'],
+    });
+
+    // Grant supplemental bucket access to Knowledge Base role
+    supplementalBucket.grantReadWrite(knowledgeBaseRole);
+
+    // Grant documents bucket access to data ingestion Lambda
+    documentsBucket.grantReadWrite(dataIngestionLambda);
+    supplementalBucket.grantReadWrite(dataIngestionLambda);
 
     // ===== Outputs =====
     new cdk.CfnOutput(this, 'ApiGatewayUrl', {
@@ -329,6 +381,16 @@ export class BedrockChatbotStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DocumentsBucketName', {
       value: documentsBucket.bucketName,
       description: 'S3 Documents Bucket Name',
+    });
+
+    new cdk.CfnOutput(this, 'SupplementalBucketName', {
+      value: supplementalBucket.bucketName,
+      description: 'S3 Supplemental Data Storage Bucket Name',
+    });
+
+    new cdk.CfnOutput(this, 'BuildsBucketName', {
+      value: buildsBucket.bucketName,
+      description: 'S3 Frontend Builds Bucket Name',
     });
 
     new cdk.CfnOutput(this, 'KnowledgeBaseRoleArn', {

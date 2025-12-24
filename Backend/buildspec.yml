@@ -53,6 +53,7 @@ phases:
           echo "✅ CDK deployment successful"
           
           echo "=== PHASE 2: Extracting CDK Outputs ==="
+          STACK_NAME="AmericasBloodCentersBedrockStack"
           DOCUMENTS_BUCKET=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.DocumentsBucketName // empty')
           KB_ROLE_ARN=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.KnowledgeBaseRoleArn // empty')
           CHAT_LAMBDA_NAME=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.ChatLambdaFunctionName // empty')
@@ -300,104 +301,21 @@ phases:
           # Step 5: Create Knowledge Base with Supplemental Data Storage
           echo "Step 5: Creating Bedrock Knowledge Base with supplemental storage..."
           
-          # Create supplemental data storage bucket
-          SUPPLEMENTAL_BUCKET="${PROJECT_NAME}-supplemental-${AWS_ACCOUNT_ID}-${CDK_DEFAULT_REGION}"
-          echo "Creating supplemental data storage bucket: $SUPPLEMENTAL_BUCKET"
+          # Get supplemental bucket from CDK stack outputs
+          SUPPLEMENTAL_BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='SupplementalBucketName'].OutputValue | [0]" \
+            --output text)
           
-          if ! aws s3 ls "s3://$SUPPLEMENTAL_BUCKET" >/dev/null 2>&1; then
-            aws s3 mb "s3://$SUPPLEMENTAL_BUCKET" --region "$CDK_DEFAULT_REGION"
-            echo "✓ Supplemental storage bucket created: $SUPPLEMENTAL_BUCKET"
+          if [ -z "$SUPPLEMENTAL_BUCKET" ] || [ "$SUPPLEMENTAL_BUCKET" = "None" ]; then
+            echo "✗ Supplemental bucket not found in CDK stack outputs"
+            exit 1
           else
-            echo "✓ Supplemental storage bucket already exists: $SUPPLEMENTAL_BUCKET"
+            echo "✓ Using CDK-created supplemental bucket: $SUPPLEMENTAL_BUCKET"
           fi
           
-          # Add supplemental bucket permissions to Knowledge Base role
-          echo "Adding supplemental bucket permissions to Knowledge Base role..."
-          KB_ROLE_NAME=$(echo "$KB_ROLE_ARN" | sed 's/.*role\///')
-          
-          # Create policy document for supplemental bucket access
-          SUPPLEMENTAL_POLICY_DOC='{
-            "Version": "2012-10-17",
-            "Statement": [
-              {
-                "Effect": "Allow",
-                "Action": [
-                  "s3:GetObject",
-                  "s3:PutObject",
-                  "s3:DeleteObject",
-                  "s3:ListBucket"
-                ],
-                "Resource": [
-                  "arn:aws:s3:::'"$SUPPLEMENTAL_BUCKET"'",
-                  "arn:aws:s3:::'"$SUPPLEMENTAL_BUCKET"'/*"
-                ]
-              }
-            ]
-          }'
-          
-          # Create and attach the policy
-          SUPPLEMENTAL_POLICY_NAME="${PROJECT_NAME}-supplemental-bucket-policy"
-          
-          # Check if policy already exists
-          if aws iam get-policy --policy-arn "arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${SUPPLEMENTAL_POLICY_NAME}" >/dev/null 2>&1; then
-            echo "✓ Supplemental bucket policy already exists"
-          else
-            echo "Creating supplemental bucket policy..."
-            aws iam create-policy \
-              --policy-name "$SUPPLEMENTAL_POLICY_NAME" \
-              --policy-document "$SUPPLEMENTAL_POLICY_DOC" \
-              --description "Policy for Knowledge Base access to supplemental storage bucket"
-            echo "✓ Supplemental bucket policy created"
-          fi
-          
-          # Attach policy to Knowledge Base role
-          echo "Attaching supplemental bucket policy to Knowledge Base role..."
-          aws iam attach-role-policy \
-            --role-name "$KB_ROLE_NAME" \
-            --policy-arn "arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${SUPPLEMENTAL_POLICY_NAME}" || echo "Policy may already be attached"
-          
-          # Verify policy attachment
-          echo "Verifying policy attachment..."
-          ATTACHED_POLICIES=$(aws iam list-attached-role-policies --role-name "$KB_ROLE_NAME" --query 'AttachedPolicies[?PolicyName==`'"$SUPPLEMENTAL_POLICY_NAME"'`].PolicyName' --output text)
-          if [ -n "$ATTACHED_POLICIES" ]; then
-            echo "✓ Supplemental bucket policy successfully attached to role"
-          else
-            echo "⚠ Policy attachment verification failed, but continuing..."
-          fi
-          
-          # Wait for IAM changes to propagate
-          echo "Waiting for IAM policy changes to propagate..."
-          sleep 30
-          
-          echo "✓ Knowledge Base role updated with supplemental bucket permissions"
-          
-          # Also add bucket policy to allow the Knowledge Base role
-          echo "Adding bucket policy to allow Knowledge Base role access..."
-          BUCKET_POLICY='{
-            "Version": "2012-10-17",
-            "Statement": [
-              {
-                "Effect": "Allow",
-                "Principal": {
-                  "AWS": "'"$KB_ROLE_ARN"'"
-                },
-                "Action": [
-                  "s3:GetObject",
-                  "s3:PutObject",
-                  "s3:DeleteObject",
-                  "s3:ListBucket"
-                ],
-                "Resource": [
-                  "arn:aws:s3:::'"$SUPPLEMENTAL_BUCKET"'",
-                  "arn:aws:s3:::'"$SUPPLEMENTAL_BUCKET"'/*"
-                ]
-              }
-            ]
-          }'
-          
-          # Apply bucket policy
-          aws s3api put-bucket-policy --bucket "$SUPPLEMENTAL_BUCKET" --policy "$BUCKET_POLICY"
-          echo "✓ Bucket policy applied to allow Knowledge Base role access"
+          # Permissions already handled by CDK
+          echo "✓ Supplemental bucket permissions configured by CDK"
           
           KB_ID=$(aws bedrock-agent list-knowledge-bases \
             --region "$CDK_DEFAULT_REGION" \
@@ -528,7 +446,7 @@ phases:
                 "type": "S3",
                 "s3Configuration": {
                   "bucketArn": "'"$BUCKET_ARN"'",
-                  "inclusionPrefixes": ["pdfs/"]
+                  "inclusionPrefixes": ["documents/"]
                 }
               }' \
               --vector-ingestion-configuration '{
@@ -569,6 +487,42 @@ phases:
             echo "✓ Found existing Web Crawler Data Source: $WEB_DS_ID"
           else
             echo "Creating new Web Crawler Data Source..."
+            
+            # Read URLs from S3 files dynamically
+            echo "Reading URLs from S3 files..."
+            SEED_URLS=""
+            
+            # Read daily-sync.txt for daily URLs
+            if aws s3 ls "s3://$DOCUMENTS_BUCKET/documents/daily-sync.txt" >/dev/null 2>&1; then
+              DAILY_URLS=$(aws s3 cp "s3://$DOCUMENTS_BUCKET/documents/daily-sync.txt" - | grep -v '^#' | grep -v '^$')
+              echo "Found daily sync URLs:"
+              echo "$DAILY_URLS"
+            fi
+            
+            # Read urls.txt for regular URLs
+            if aws s3 ls "s3://$DOCUMENTS_BUCKET/documents/urls.txt" >/dev/null 2>&1; then
+              REGULAR_URLS=$(aws s3 cp "s3://$DOCUMENTS_BUCKET/documents/urls.txt" - | grep -v '^#' | grep -v '^$')
+              echo "Found regular URLs:"
+              echo "$REGULAR_URLS"
+            fi
+            
+            # Combine URLs and format for JSON
+            ALL_URLS=$(echo -e "$DAILY_URLS\n$REGULAR_URLS" | grep -v '^$' | sort -u)
+            
+            if [ -n "$ALL_URLS" ]; then
+              # Convert URLs to JSON format
+              SEED_URLS=$(echo "$ALL_URLS" | sed 's/^/{"url": "/' | sed 's/$/"},/' | tr '\n' ' ' | sed 's/,$//')
+              echo "Formatted seed URLs: $SEED_URLS"
+            else
+              # Fallback to default URLs if files not found
+              echo "⚠ No URL files found, using default URLs"
+              SEED_URLS='{"url": "https://americasblood.org/for-donors/americas-blood-supply/"},
+                        {"url": "https://americasblood.org/for-donors/find-a-blood-center/"},
+                        {"url": "https://americasblood.org/news/"},
+                        {"url": "https://americasblood.org/newsroom/"},
+                        {"url": "https://americasblood.org/one-pagers-faqs/"}'
+            fi
+            
             WEB_DS_ID=$(aws bedrock-agent create-data-source \
               --name "blood-centers-websites" \
               --description "Blood donation websites and news from America's Blood Centers" \
@@ -578,13 +532,7 @@ phases:
                 "webConfiguration": {
                   "sourceConfiguration": {
                     "urlConfiguration": {
-                      "seedUrls": [
-                        {"url": "https://americasblood.org/for-donors/americas-blood-supply/"},
-                        {"url": "https://americasblood.org/for-donors/find-a-blood-center/"},
-                        {"url": "https://americasblood.org/news/"},
-                        {"url": "https://americasblood.org/newsroom/"},
-                        {"url": "https://americasblood.org/one-pagers-faqs/"}
-                      ]
+                      "seedUrls": ['"$SEED_URLS"']
                     }
                   },
                   "crawlerConfiguration": {
@@ -636,17 +584,11 @@ phases:
           # Set primary data source ID for backward compatibility
           DS_ID="$S3_DS_ID"
           
-          # Step 7: Upload initial documents
+          # Step 7: Document upload handled by CDK
           echo "=== PHASE 5: Document Upload ==="
-          
-          # Upload PDF files to pdfs/ prefix for S3 data source
-          if [ -d "data-sources" ]; then
-            echo "Uploading PDF files to S3..."
-            aws s3 cp data-sources/ s3://$DOCUMENTS_BUCKET/pdfs/ --recursive --include "*.pdf"
-            
-            # Upload other document files to documents/ prefix (for backward compatibility)
-            aws s3 cp data-sources/ s3://$DOCUMENTS_BUCKET/documents/ --recursive --exclude "*.md" --exclude "*.pdf"
-          fi
+          echo "✓ Documents already uploaded by CDK BucketDeployment"
+          echo "✓ PDFs deployed to s3://$DOCUMENTS_BUCKET/pdfs/"
+          echo "✓ Text files deployed to s3://$DOCUMENTS_BUCKET/documents/"
           
           echo "✓ Initial documents uploaded"
           
@@ -689,10 +631,120 @@ phases:
           
           echo "✓ Lambda environment variables updated"
           
-          # Step 9: Start initial ingestion jobs for both data sources
-          echo "=== PHASE 7: Knowledge Base Ingestion ==="
+          # Step 9: Deploy Frontend (before ingestion to save time)
+          echo "=== PHASE 7: Frontend Deployment ==="
           
-          # Start S3 ingestion job for PDFs
+          # Check if we're in a CodeBuild environment and have access to the Frontend directory
+          if [ -d "../Frontend" ]; then
+            echo "Deploying React frontend to AWS Amplify..."
+            
+            # Create Amplify app
+            AMPLIFY_APP_NAME="${PROJECT_NAME}-chatbot"
+            echo "Creating Amplify app: $AMPLIFY_APP_NAME"
+            
+            # Check if app already exists
+            EXISTING_APP_ID=$(aws amplify list-apps --query "apps[?name=='$AMPLIFY_APP_NAME'].appId | [0]" --output text 2>/dev/null || echo "")
+            
+            if [ -n "$EXISTING_APP_ID" ] && [ "$EXISTING_APP_ID" != "None" ] && [ "$EXISTING_APP_ID" != "null" ]; then
+              echo "✓ Found existing Amplify app: $EXISTING_APP_ID"
+              AMPLIFY_APP_ID="$EXISTING_APP_ID"
+            else
+              echo "Creating new Amplify app..."
+              AMPLIFY_APP_ID=$(aws amplify create-app \
+                --name "$AMPLIFY_APP_NAME" \
+                --platform WEB \
+                --environment-variables "REACT_APP_API_BASE_URL=$API_URL,REACT_APP_CHAT_ENDPOINT=$API_URL" \
+                --query 'app.appId' --output text)
+              echo "✓ Amplify app created: $AMPLIFY_APP_ID"
+            fi
+            
+            # Create main branch if it doesn't exist
+            EXISTING_BRANCH=$(aws amplify list-branches --app-id "$AMPLIFY_APP_ID" --query "branches[?branchName=='main'].branchName | [0]" --output text 2>/dev/null || echo "")
+            
+            if [ -z "$EXISTING_BRANCH" ] || [ "$EXISTING_BRANCH" = "None" ] || [ "$EXISTING_BRANCH" = "null" ]; then
+              echo "Creating main branch..."
+              aws amplify create-branch \
+                --app-id "$AMPLIFY_APP_ID" \
+                --branch-name "main" \
+                --stage PRODUCTION
+              echo "✓ Main branch created"
+            else
+              echo "✓ Main branch already exists"
+            fi
+            
+            # Build and deploy frontend
+            echo "Building React frontend..."
+            cd ../Frontend
+            
+            # Create environment file with API URL
+            echo "REACT_APP_API_BASE_URL=$API_URL" > .env.production
+            echo "REACT_APP_CHAT_ENDPOINT=$API_URL" >> .env.production
+            
+            # Install dependencies and build
+            npm install --production
+            npm run build
+            
+            # Create deployment package
+            cd build
+            zip -r ../build.zip .
+            cd ..
+            
+            # Upload to S3 for Amplify deployment using CDK-created bucket
+            BUILD_BUCKET=$(aws cloudformation describe-stacks \
+              --stack-name "$STACK_NAME" \
+              --query "Stacks[0].Outputs[?OutputKey=='BuildsBucketName'].OutputValue | [0]" \
+              --output text)
+            
+            if [ -n "$BUILD_BUCKET" ] && [ "$BUILD_BUCKET" != "None" ]; then
+              echo "Uploading build to CDK-created S3 bucket: $BUILD_BUCKET"
+              BUILD_KEY="builds/build-$(date +%s).zip"
+              aws s3 cp build.zip "s3://$BUILD_BUCKET/$BUILD_KEY"
+              echo "✓ Build uploaded to S3"
+            else
+              echo "⚠ Builds bucket not found, using fallback"
+              BUILD_BUCKET="${PROJECT_NAME}-builds-${AWS_ACCOUNT_ID}-${CDK_DEFAULT_REGION}"
+              BUILD_KEY="builds/build-$(date +%s).zip"
+              aws s3 cp build.zip "s3://$BUILD_BUCKET/$BUILD_KEY" 2>/dev/null || echo "⚠ Could not upload to S3"
+            fi
+            
+            # Start Amplify deployment
+            echo "Starting Amplify deployment..."
+            JOB_ID=$(aws amplify start-deployment \
+              --app-id "$AMPLIFY_APP_ID" \
+              --branch-name "main" \
+              --source-url "s3://$BUILD_BUCKET/$BUILD_KEY" \
+              --query 'jobSummary.jobId' --output text 2>/dev/null || echo "MANUAL")
+            
+            if [ "$JOB_ID" != "MANUAL" ]; then
+              echo "✓ Amplify deployment started: $JOB_ID"
+              FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com"
+              echo "✓ Frontend will be available at: $FRONTEND_URL"
+            else
+              echo "⚠ Automatic deployment failed. Manual deployment required."
+              echo "📋 Manual steps:"
+              echo "1. Go to AWS Amplify Console"
+              echo "2. Select app: $AMPLIFY_APP_NAME"
+              echo "3. Deploy the build.zip file manually"
+              FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (manual deployment required)"
+            fi
+            
+            cd ../Backend
+          else
+            echo "⚠ Frontend directory not found. Skipping frontend deployment."
+            echo "📋 To deploy frontend manually:"
+            echo "1. Navigate to the Frontend directory"
+            echo "2. Set REACT_APP_API_BASE_URL=$API_URL"
+            echo "3. Run: npm install && npm run build"
+            echo "4. Deploy to AWS Amplify"
+            FRONTEND_URL="Manual deployment required"
+          fi
+          
+          # Step 10: Start sequential ingestion jobs (PDFs first, then websites)
+          echo ""
+          echo "=== PHASE 8: Knowledge Base Ingestion ==="
+          
+          # Start S3 ingestion job for PDFs (faster, so we do this first)
+          echo "Starting S3 ingestion job for PDFs..."
           S3_INGESTION_JOB_ID=$(aws bedrock-agent start-ingestion-job \
             --knowledge-base-id "$KB_ID" \
             --data-source-id "$S3_DS_ID" \
@@ -702,18 +754,84 @@ phases:
           
           echo "✓ S3 ingestion job started: $S3_INGESTION_JOB_ID"
           
-          # Start Web Crawler ingestion job
-          WEB_INGESTION_JOB_ID=$(aws bedrock-agent start-ingestion-job \
-            --knowledge-base-id "$KB_ID" \
-            --data-source-id "$WEB_DS_ID" \
-            --description "Initial crawling of America's Blood Centers websites" \
-            --region "$CDK_DEFAULT_REGION" \
-            --query 'ingestionJob.ingestionJobId' --output text)
+          # Wait for S3 ingestion to complete before starting web crawler
+          echo "Waiting for S3 ingestion to complete before starting web crawler..."
+          S3_JOB_STATUS="IN_PROGRESS"
+          WAIT_TIME=0
+          MAX_WAIT=600  # 10 minutes max wait
           
-          echo "✓ Web Crawler ingestion job started: $WEB_INGESTION_JOB_ID"
+          while [ "$S3_JOB_STATUS" = "IN_PROGRESS" ] && [ $WAIT_TIME -lt $MAX_WAIT ]; do
+            sleep 30
+            WAIT_TIME=$((WAIT_TIME + 30))
+            
+            S3_JOB_STATUS=$(aws bedrock-agent get-ingestion-job \
+              --knowledge-base-id "$KB_ID" \
+              --data-source-id "$S3_DS_ID" \
+              --ingestion-job-id "$S3_INGESTION_JOB_ID" \
+              --region "$CDK_DEFAULT_REGION" \
+              --query 'ingestionJob.status' --output text)
+            
+            echo "S3 ingestion status: $S3_JOB_STATUS (waited ${WAIT_TIME}s)"
+          done
+          
+          if [ "$S3_JOB_STATUS" = "COMPLETE" ]; then
+            echo "✓ S3 ingestion completed successfully"
+            
+            # Now start Web Crawler ingestion job
+            echo "Starting Web Crawler ingestion job..."
+            WEB_INGESTION_JOB_ID=$(aws bedrock-agent start-ingestion-job \
+              --knowledge-base-id "$KB_ID" \
+              --data-source-id "$WEB_DS_ID" \
+              --description "Initial crawling of America's Blood Centers websites" \
+              --region "$CDK_DEFAULT_REGION" \
+              --query 'ingestionJob.ingestionJobId' --output text)
+            
+            echo "✓ Web Crawler ingestion job started: $WEB_INGESTION_JOB_ID"
+          else
+            echo "⚠ S3 ingestion did not complete in time (status: $S3_JOB_STATUS)"
+            echo "⚠ Skipping web crawler ingestion for now"
+            WEB_INGESTION_JOB_ID="SKIPPED"
+          fi
           
           # Set primary ingestion job ID for backward compatibility
           INGESTION_JOB_ID="$S3_INGESTION_JOB_ID"
+          
+          # Step 11: Update Daily Sync Lambda (already created by CDK)
+          echo ""
+          echo "=== PHASE 9: Daily Sync Configuration ==="
+          
+          # Update the existing data ingestion Lambda with Knowledge Base IDs
+          DATA_INGESTION_FUNCTION_NAME=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='DataIngestionFunctionName'].OutputValue | [0]" \
+            --output text)
+          
+          if [ -n "$DATA_INGESTION_FUNCTION_NAME" ] && [ "$DATA_INGESTION_FUNCTION_NAME" != "None" ]; then
+            echo "Updating data ingestion Lambda function: $DATA_INGESTION_FUNCTION_NAME"
+            
+            # Update environment variables with actual Knowledge Base and Data Source IDs
+            aws lambda update-function-configuration \
+              --function-name "$DATA_INGESTION_FUNCTION_NAME" \
+              --environment "Variables={DOCUMENTS_BUCKET=$DOCUMENTS_BUCKET,KNOWLEDGE_BASE_ID=$KB_ID,S3_DATA_SOURCE_ID=$S3_DS_ID,WEB_DATA_SOURCE_ID=$WEB_DS_ID}" \
+              --region "$CDK_DEFAULT_REGION"
+            
+            echo "✓ Data ingestion Lambda updated with Knowledge Base IDs"
+            echo "✓ Daily sync is already configured via CDK EventBridge rule"
+            echo "✓ Schedule: Daily at 7 PM UTC (2 PM EST)"
+            
+            # Check if daily-sync.txt exists for URL configuration
+            if aws s3 ls "s3://$DOCUMENTS_BUCKET/documents/daily-sync.txt" >/dev/null 2>&1; then
+              echo "✓ Found daily-sync.txt - URLs will be read dynamically"
+            else
+              echo "📋 To configure daily sync URLs:"
+              echo "1. Upload daily-sync.txt to s3://$DOCUMENTS_BUCKET/documents/"
+              echo "2. Add URLs (one per line) that should be synced daily"
+              echo "3. The Lambda function will read these URLs automatically"
+            fi
+          else
+            echo "⚠ Data ingestion Lambda function not found in stack outputs"
+            echo "⚠ Daily sync may not be properly configured"
+          fi
           
           echo ""
           echo "========================================="
@@ -727,6 +845,7 @@ phases:
           echo "📊 S3 Ingestion Job ID: $S3_INGESTION_JOB_ID"
           echo "🕷️ Web Ingestion Job ID: $WEB_INGESTION_JOB_ID"
           echo "🌐 API Gateway URL: $API_URL"
+          echo "💻 Frontend URL: ${FRONTEND_URL:-Not deployed}"
           echo "========================================="
           echo ""
           echo "========================================="
