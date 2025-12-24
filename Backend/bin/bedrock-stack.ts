@@ -6,9 +6,9 @@ import { BedrockChatbotStack } from '../lib/bedrock-chatbot-stack';
 const app = new cdk.App();
 
 new BedrockChatbotStack(app, 'AmericasBloodCentersBedrockStack', {
-  projectName: 'americas-blood-centers-bedrock',
-  modelId: 'anthropic.claude-3-haiku-20240307-v1:0', // Fast and cost-effective
-  embeddingModelId: 'amazon.titan-embed-text-v1',
+  projectName: app.node.tryGetContext('projectName') || 'abc',
+  modelId: app.node.tryGetContext('modelId') || 'anthropic.claude-3-haiku-20240307-v1:0',
+  embeddingModelId: app.node.tryGetContext('embeddingModelId') || 'amazon.titan-embed-text-v1',
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION || 'us-east-1',

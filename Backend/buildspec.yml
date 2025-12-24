@@ -20,7 +20,15 @@ phases:
       - cd lambda && pip install -r requirements.txt -t . && cd ..
       - echo "✅ Lambda dependencies installed"
       - echo "=== Bootstrapping CDK Environment ==="
-      - cdk bootstrap --require-approval never
+      - |
+        # Set default PROJECT_NAME for bootstrap if not provided
+        if [ -z "$PROJECT_NAME" ]; then
+          PROJECT_NAME="abc"
+        fi
+        cdk bootstrap --require-approval never \
+          --context projectName="$PROJECT_NAME" \
+          --context modelId="${MODEL_ID:-anthropic.claude-3-haiku-20240307-v1:0}" \
+          --context embeddingModelId="${EMBEDDING_MODEL_ID:-amazon.titan-embed-text-v1}"
       - echo "✅ CDK Bootstrap completed"
 
   build:
