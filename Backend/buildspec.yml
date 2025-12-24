@@ -459,6 +459,7 @@ phases:
               --name "blood-centers-pdfs" \
               --description "PDF documents about blood donation with Bedrock Data Automation parser" \
               --knowledge-base-id "$KB_ID" \
+              --data-deletion-policy RETAIN \
               --data-source-configuration '{
                 "type": "S3",
                 "s3Configuration": {
@@ -544,6 +545,7 @@ phases:
               --name "blood-centers-websites" \
               --description "Blood donation websites and news from America's Blood Centers" \
               --knowledge-base-id "$KB_ID" \
+              --data-deletion-policy RETAIN \
               --data-source-configuration '{
                 "type": "WEB",
                 "webConfiguration": {
