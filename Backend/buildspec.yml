@@ -356,7 +356,48 @@ phases:
             --role-name "$KB_ROLE_NAME" \
             --policy-arn "arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${SUPPLEMENTAL_POLICY_NAME}" || echo "Policy may already be attached"
           
+          # Verify policy attachment
+          echo "Verifying policy attachment..."
+          ATTACHED_POLICIES=$(aws iam list-attached-role-policies --role-name "$KB_ROLE_NAME" --query 'AttachedPolicies[?PolicyName==`'"$SUPPLEMENTAL_POLICY_NAME"'`].PolicyName' --output text)
+          if [ -n "$ATTACHED_POLICIES" ]; then
+            echo "✓ Supplemental bucket policy successfully attached to role"
+          else
+            echo "⚠ Policy attachment verification failed, but continuing..."
+          fi
+          
+          # Wait for IAM changes to propagate
+          echo "Waiting for IAM policy changes to propagate..."
+          sleep 30
+          
           echo "✓ Knowledge Base role updated with supplemental bucket permissions"
+          
+          # Also add bucket policy to allow the Knowledge Base role
+          echo "Adding bucket policy to allow Knowledge Base role access..."
+          BUCKET_POLICY='{
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                  "AWS": "'"$KB_ROLE_ARN"'"
+                },
+                "Action": [
+                  "s3:GetObject",
+                  "s3:PutObject",
+                  "s3:DeleteObject",
+                  "s3:ListBucket"
+                ],
+                "Resource": [
+                  "arn:aws:s3:::'"$SUPPLEMENTAL_BUCKET"'",
+                  "arn:aws:s3:::'"$SUPPLEMENTAL_BUCKET"'/*"
+                ]
+              }
+            ]
+          }'
+          
+          # Apply bucket policy
+          aws s3api put-bucket-policy --bucket "$SUPPLEMENTAL_BUCKET" --policy "$BUCKET_POLICY"
+          echo "✓ Bucket policy applied to allow Knowledge Base role access"
           
           KB_ID=$(aws bedrock-agent list-knowledge-bases \
             --region "$CDK_DEFAULT_REGION" \
@@ -381,6 +422,20 @@ phases:
           echo "🔍 Debug: Supplemental Bucket: $SUPPLEMENTAL_BUCKET"
           echo "🔍 Debug: Region: $CDK_DEFAULT_REGION"
           echo "🔍 Debug: Embedding Model: $EMBEDDING_MODEL_ID"
+          
+          # Verify bucket access and ownership
+          echo "Verifying supplemental bucket access..."
+          BUCKET_OWNER=$(aws s3api get-bucket-location --bucket "$SUPPLEMENTAL_BUCKET" --query 'LocationConstraint' --output text 2>/dev/null || echo "ERROR")
+          if [ "$BUCKET_OWNER" != "ERROR" ]; then
+            echo "✓ Bucket access verified"
+            echo "🔍 Debug: Bucket region: $BUCKET_OWNER"
+          else
+            echo "⚠ Could not verify bucket access"
+          fi
+          
+          # Test if the role can access the bucket (simulate what Bedrock will do)
+          echo "Testing bucket permissions..."
+          aws s3 ls "s3://$SUPPLEMENTAL_BUCKET" >/dev/null 2>&1 && echo "✓ Bucket listing successful" || echo "⚠ Bucket listing failed"
           
           # Try to create Knowledge Base with detailed error capture
           set +e  # Temporarily disable exit on error
