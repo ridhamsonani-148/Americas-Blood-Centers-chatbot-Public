@@ -18,7 +18,7 @@ export class BedrockChatbotStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: BedrockChatbotStackProps = {}) {
     super(scope, id, props);
 
-    const projectName = props.projectName || 'americas-blood-centers-bedrock';
+    const projectName = props.projectName || 'abc';
     const modelId = props.modelId || 'anthropic.claude-3-haiku-20240307-v1:0';
     const embeddingModelId = props.embeddingModelId || 'amazon.titan-embed-text-v1';
 

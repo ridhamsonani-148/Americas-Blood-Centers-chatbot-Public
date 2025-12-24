@@ -39,6 +39,15 @@ phases:
           echo "========================================="
           
           echo "=== PHASE 1: CDK Infrastructure Deployment ==="
+          
+          # Set default PROJECT_NAME if not provided
+          if [ -z "$PROJECT_NAME" ]; then
+            PROJECT_NAME="abc"
+            echo "🔍 Using default PROJECT_NAME: $PROJECT_NAME"
+          else
+            echo "🔍 Using provided PROJECT_NAME: $PROJECT_NAME"
+          fi
+          
           cdk deploy AmericasBloodCentersBedrockStack --require-approval never \
             --context projectName="$PROJECT_NAME" \
             --context modelId="$MODEL_ID" \
