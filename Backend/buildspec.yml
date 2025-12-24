@@ -576,21 +576,21 @@ phases:
               --data-source-configuration '{
                 "type": "WEB",
                 "webConfiguration": {
-                  "urlConfiguration": {
-                    "seedUrls": [
-                      {"url": "https://americasblood.org/for-donors/americas-blood-supply/"},
-                      {"url": "https://americasblood.org/for-donors/find-a-blood-center/"},
-                      {"url": "https://americasblood.org/news/"},
-                      {"url": "https://americasblood.org/newsroom/"},
-                      {"url": "https://americasblood.org/one-pagers-faqs/"}
-                    ]
+                  "sourceConfiguration": {
+                    "urlConfiguration": {
+                      "seedUrls": [
+                        {"url": "https://americasblood.org/for-donors/americas-blood-supply/"},
+                        {"url": "https://americasblood.org/for-donors/find-a-blood-center/"},
+                        {"url": "https://americasblood.org/news/"},
+                        {"url": "https://americasblood.org/newsroom/"},
+                        {"url": "https://americasblood.org/one-pagers-faqs/"}
+                      ]
+                    }
                   },
                   "crawlerConfiguration": {
                     "crawlerLimits": {
                       "rateLimit": 300,
-                      "maxCrawlDepth": 2,
-                      "maxLinksPerPage": 100,
-                      "maxPagesPerUrl": 50
+                      "maxPages": 50
                     },
                     "exclusionFilters": [
                       "*/wp-admin/*", 
