@@ -525,11 +525,13 @@ phases:
             fi
             
             # Combine URLs and format for JSON
-            ALL_URLS=$(echo -e "$DAILY_URLS\n$REGULAR_URLS" | grep -v '^$' | sort -u)
+            ALL_URLS=$(printf "%s\n%s\n" "$DAILY_URLS" "$REGULAR_URLS" | grep -v '^$' | grep -v '^#' | sort -u)
             
             if [ -n "$ALL_URLS" ]; then
-              # Convert URLs to JSON format
-              SEED_URLS=$(echo "$ALL_URLS" | sed 's/^/{"url": "/' | sed 's/$/"},/' | tr '\n' ' ' | sed 's/,$//')
+              # Convert URLs to JSON format (remove trailing comma properly)
+              SEED_URLS=$(echo "$ALL_URLS" | sed 's/^/{"url": "/' | sed 's/$/"},/' | tr '\n' ' ')
+              # Remove the trailing comma and space
+              SEED_URLS=$(echo "$SEED_URLS" | sed 's/, *$//')
               echo "Formatted seed URLs: $SEED_URLS"
             else
               # Fallback to default URLs if files not found
