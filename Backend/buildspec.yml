@@ -948,14 +948,8 @@ phases:
               # Trigger immediate deployment (like Catholic Charity project)
               echo "🚀 Triggering immediate Amplify deployment..."
               
-              # Invoke the AmplifyDeployer Lambda directly with the build details
-              DEPLOY_PAYLOAD=$(cat << EOF
-{
-  "bucket": "$BUILD_BUCKET",
-  "key": "$BUILD_KEY"
-}
-EOF
-)
+              # Create JSON payload for Lambda invocation
+              DEPLOY_PAYLOAD='{"bucket":"'$BUILD_BUCKET'","key":"'$BUILD_KEY'"}'
               
               echo "Invoking AmplifyDeployer Lambda with payload: $DEPLOY_PAYLOAD"
               
