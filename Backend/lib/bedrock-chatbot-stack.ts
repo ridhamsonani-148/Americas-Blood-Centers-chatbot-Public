@@ -364,40 +364,6 @@ export class BedrockChatbotStack extends cdk.Stack {
       },
       description: 'Automated Amplify deployment handler',
     });
-
-    // EventBridge rule to trigger Amplify deployment on S3 upload
-    const amplifyDeploymentRule = new events.Rule(this, 'AmplifyDeploymentRule', {
-      eventPattern: {
-        source: ['aws.s3'],
-        detailType: ['Object Created'],
-        detail: {
-          bucket: {
-            name: [buildsBucket.bucketName],
-          },
-          object: {
-            key: [{ prefix: 'builds/' }],
-          },
-        },
-      },
-      description: 'Trigger Amplify deployment when build is uploaded to S3',
-    });
-
-    amplifyDeploymentRule.addTarget(
-      new targets.LambdaFunction(amplifyDeployerLambda, {
-        event: events.RuleTargetInput.fromObject({
-          bucket: buildsBucket.bucketName,
-          key: events.EventField.fromPath('$.detail.object.key'),
-        }),
-      })
-    );
-
-    amplifyDeployerLambda.addPermission('AllowEventBridgeInvokeAmplify', {
-      principal: new iam.ServicePrincipal('events.amazonaws.com'),
-      sourceArn: amplifyDeploymentRule.ruleArn,
-    });
-
-    // Enable S3 event notifications for EventBridge
-    buildsBucket.enableEventBridgeNotification();
     const dataIngestionLambda = new lambda.Function(this, 'DataIngestionFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'data_ingestion.lambda_handler',

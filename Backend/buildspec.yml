@@ -925,8 +925,8 @@ phases:
               aws s3 cp build.zip "s3://$BUILD_BUCKET/$BUILD_KEY" 2>/dev/null || echo "⚠ Could not upload to S3"
             fi
             
-            # Configure AmplifyDeployer Lambda for automatic deployment
-            echo "Configuring automatic deployment via AmplifyDeployer Lambda..."
+            # Update AmplifyDeployer Lambda with Amplify app details (like Catholic Charity project)
+            echo "Configuring AmplifyDeployer Lambda for automatic deployment..."
             
             # Get AmplifyDeployer function name from CDK outputs
             AMPLIFY_DEPLOYER_FUNCTION_NAME=$(aws cloudformation describe-stacks \
@@ -937,18 +937,57 @@ phases:
             if [ -n "$AMPLIFY_DEPLOYER_FUNCTION_NAME" ] && [ "$AMPLIFY_DEPLOYER_FUNCTION_NAME" != "None" ]; then
               echo "✓ Found AmplifyDeployer Lambda: $AMPLIFY_DEPLOYER_FUNCTION_NAME"
               
-              # Update AmplifyDeployer Lambda with Amplify app details
+              # Update AmplifyDeployer Lambda with Amplify app details (Catholic Charity style)
               aws lambda update-function-configuration \
                 --function-name "$AMPLIFY_DEPLOYER_FUNCTION_NAME" \
                 --environment "Variables={AMPLIFY_APP_ID=$AMPLIFY_APP_ID,AMPLIFY_BRANCH_NAME=main}" \
                 --region "$CDK_DEFAULT_REGION"
               
               echo "✓ AmplifyDeployer configured with app ID: $AMPLIFY_APP_ID"
-              echo "🚀 Automated deployment will start via EventBridge trigger"
-              echo "📱 Frontend will be available at: https://main.$AMPLIFY_APP_ID.amplifyapp.com"
-              echo "⏱️ Deployment typically completes in 2-3 minutes"
               
-              FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com"
+              # Trigger immediate deployment (like Catholic Charity project)
+              echo "🚀 Triggering immediate Amplify deployment..."
+              
+              # Invoke the AmplifyDeployer Lambda directly with the build details
+              DEPLOY_PAYLOAD=$(cat << EOF
+{
+  "bucket": "$BUILD_BUCKET",
+  "key": "$BUILD_KEY"
+}
+EOF
+)
+              
+              echo "Invoking AmplifyDeployer Lambda with payload: $DEPLOY_PAYLOAD"
+              
+              DEPLOY_RESULT=$(aws lambda invoke \
+                --function-name "$AMPLIFY_DEPLOYER_FUNCTION_NAME" \
+                --payload "$DEPLOY_PAYLOAD" \
+                --region "$CDK_DEFAULT_REGION" \
+                /tmp/deploy_response.json 2>&1)
+              
+              DEPLOY_EXIT_CODE=$?
+              echo "🔍 Debug: Lambda invocation exit code: $DEPLOY_EXIT_CODE"
+              echo "🔍 Debug: Lambda invocation result: $DEPLOY_RESULT"
+              
+              if [ $DEPLOY_EXIT_CODE -eq 0 ]; then
+                DEPLOY_RESPONSE=$(cat /tmp/deploy_response.json)
+                echo "🔍 Debug: Lambda response: $DEPLOY_RESPONSE"
+                
+                if echo "$DEPLOY_RESPONSE" | grep -q '"statusCode": 200'; then
+                  echo "✓ Amplify deployment triggered successfully"
+                  echo "📱 Frontend will be available at: https://main.$AMPLIFY_APP_ID.amplifyapp.com"
+                  echo "⏱️ Deployment typically completes in 2-3 minutes"
+                  FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com"
+                else
+                  echo "⚠ Deployment trigger may have failed"
+                  echo "Response: $DEPLOY_RESPONSE"
+                  FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (check deployment status)"
+                fi
+              else
+                echo "✗ Failed to trigger deployment"
+                echo "Error: $DEPLOY_RESULT"
+                FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (manual deployment required)"
+              fi
             else
               echo "⚠ AmplifyDeployer Lambda not found, falling back to manual deployment"
               echo "📋 Manual deployment options:"
