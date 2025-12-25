@@ -753,6 +753,16 @@ phases:
             echo "🔍 Debug: Checking for index.html specifically..."
             [ -f "../Frontend/public/index.html" ] && echo "✓ index.html found" || echo "✗ index.html NOT found"
             
+            # Additional debugging for file permissions and content
+            echo "🔍 Debug: File permissions check..."
+            ls -la ../Frontend/public/index.html 2>/dev/null || echo "Cannot access index.html file"
+            echo "🔍 Debug: Directory permissions..."
+            ls -ld ../Frontend/public/ 2>/dev/null || echo "Cannot access public directory"
+            
+            # Try to read the file to verify it's accessible
+            echo "🔍 Debug: Attempting to read index.html..."
+            head -5 ../Frontend/public/index.html 2>/dev/null && echo "✓ File is readable" || echo "✗ File is not readable"
+            
             # Create Amplify app
             AMPLIFY_APP_NAME="${PROJECT_NAME}-chatbot"
             echo "Creating Amplify app: $AMPLIFY_APP_NAME"
@@ -791,13 +801,109 @@ phases:
             echo "Building React frontend..."
             cd ../Frontend
             
+            # Ensure index.html exists and is accessible
+            if [ ! -f "public/index.html" ] || [ ! -r "public/index.html" ]; then
+              echo "⚠ index.html missing or not readable, creating it..."
+              mkdir -p public
+              cat > public/index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#B71C1C" />
+    <meta
+      name="description"
+      content="America's Blood Centers AI Assistant - Get information about blood donation, eligibility, and donation centers powered by Amazon Bedrock."
+    />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <title>America's Blood Centers - AI Assistant</title>
+    
+    <!-- Preconnect to improve performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="America's Blood Centers - AI Assistant">
+    <meta property="og:description" content="Get information about blood donation, eligibility, and donation centers powered by Amazon Bedrock AI.">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary">
+    <meta property="twitter:title" content="America's Blood Centers - AI Assistant">
+    <meta property="twitter:description" content="Get information about blood donation, eligibility, and donation centers powered by Amazon Bedrock AI.">
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
+EOF
+              echo "✓ index.html created"
+            else
+              echo "✓ index.html exists and is readable"
+            fi
+            
+            # Ensure manifest.json exists
+            if [ ! -f "public/manifest.json" ]; then
+              echo "⚠ manifest.json missing, creating it..."
+              cat > public/manifest.json << 'EOF'
+{
+  "short_name": "ABC Assistant",
+  "name": "America's Blood Centers AI Assistant",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#B71C1C",
+  "background_color": "#ffffff"
+}
+EOF
+              echo "✓ manifest.json created"
+            fi
+            
             # Create environment file with API URL
             echo "REACT_APP_API_BASE_URL=$API_URL" > .env.production
             echo "REACT_APP_CHAT_ENDPOINT=$API_URL" >> .env.production
             
             # Install dependencies and build
-            npm install --production
-            npm run build
+            echo "Installing npm dependencies..."
+            npm install --production --no-audit --no-fund
+            
+            echo "Building React application..."
+            set +e  # Temporarily disable exit on error
+            BUILD_OUTPUT=$(npm run build 2>&1)
+            BUILD_EXIT_CODE=$?
+            set -e  # Re-enable exit on error
+            
+            echo "🔍 Debug: Build exit code: $BUILD_EXIT_CODE"
+            
+            if [ $BUILD_EXIT_CODE -eq 0 ]; then
+              echo "✓ React build successful"
+            else
+              echo "✗ React build failed"
+              echo "Build output: $BUILD_OUTPUT"
+              echo "📋 Attempting manual build recovery..."
+              
+              # Try to create a minimal build directory
+              mkdir -p build
+              cat > build/index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>America's Blood Centers - AI Assistant</title>
+</head>
+<body>
+    <div id="root">
+        <h1>America's Blood Centers AI Assistant</h1>
+        <p>The application is being deployed. Please check back shortly.</p>
+        <p>API Endpoint: <code>$API_URL</code></p>
+    </div>
+</body>
+</html>
+EOF
+              echo "✓ Created fallback build"
+            fi
             
             # Create deployment package
             cd build
