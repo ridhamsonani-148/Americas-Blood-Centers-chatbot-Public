@@ -805,33 +805,16 @@ phases:
             if [ ! -f "public/index.html" ] || [ ! -r "public/index.html" ]; then
               echo "⚠ index.html missing or not readable, creating it..."
               mkdir -p public
-              cat > public/index.html << 'EOF'
+              cat > public/index.html << EOF
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#B71C1C" />
-    <meta
-      name="description"
-      content="America's Blood Centers AI Assistant - Get information about blood donation, eligibility, and donation centers powered by Amazon Bedrock."
-    />
+    <meta name="description" content="America's Blood Centers AI Assistant" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>America's Blood Centers - AI Assistant</title>
-    
-    <!-- Preconnect to improve performance -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website">
-    <meta property="og:title" content="America's Blood Centers - AI Assistant">
-    <meta property="og:description" content="Get information about blood donation, eligibility, and donation centers powered by Amazon Bedrock AI.">
-
-    <!-- Twitter -->
-    <meta property="twitter:card" content="summary">
-    <meta property="twitter:title" content="America's Blood Centers - AI Assistant">
-    <meta property="twitter:description" content="Get information about blood donation, eligibility, and donation centers powered by Amazon Bedrock AI.">
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
@@ -847,7 +830,7 @@ EOF
             # Ensure manifest.json exists
             if [ ! -f "public/manifest.json" ]; then
               echo "⚠ manifest.json missing, creating it..."
-              cat > public/manifest.json << 'EOF'
+              cat > public/manifest.json << EOF
 {
   "short_name": "ABC Assistant",
   "name": "America's Blood Centers AI Assistant",
@@ -885,7 +868,7 @@ EOF
               
               # Try to create a minimal build directory
               mkdir -p build
-              cat > build/index.html << 'EOF'
+              cat > build/index.html << EOF
 <!DOCTYPE html>
 <html lang="en">
 <head>
