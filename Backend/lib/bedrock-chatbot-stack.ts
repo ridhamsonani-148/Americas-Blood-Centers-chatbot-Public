@@ -347,22 +347,21 @@ export class BedrockChatbotStack extends cdk.Stack {
     });
 
     // ===== Deploy Initial Documents =====
-    // Deploy documents to both locations for different purposes
-    new s3deploy.BucketDeployment(this, 'DeployDocuments', {
+    // Deploy text files to root level (no folder)
+    new s3deploy.BucketDeployment(this, 'DeployTextFiles', {
       sources: [s3deploy.Source.asset('./data-sources')],
       destinationBucket: documentsBucket,
-      destinationKeyPrefix: 'documents/',
-      include: ['*.txt', '*.pdf', '*.docx'],
-      exclude: ['*.md'],
+      include: ['*.txt'],
+      exclude: ['*.md', '*.pdf', '*.docx'],
     });
 
-    // Deploy PDFs specifically to pdfs/ prefix for S3 Data Source
+    // Deploy PDFs directly to pdfs/ folder (flattened structure)
     new s3deploy.BucketDeployment(this, 'DeployPDFs', {
-      sources: [s3deploy.Source.asset('./data-sources')],
+      sources: [s3deploy.Source.asset('./data-sources/pdfs')],
       destinationBucket: documentsBucket,
       destinationKeyPrefix: 'pdfs/',
       include: ['*.pdf'],
-      exclude: ['*.md', '*.txt', '*.docx'],
+      exclude: ['*.md', '*.txt'],
     });
 
     // Grant supplemental bucket access to Knowledge Base role

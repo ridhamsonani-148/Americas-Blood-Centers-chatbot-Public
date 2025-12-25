@@ -97,78 +97,113 @@ phases:
           echo "=== PHASE 3: Knowledge Base Resources ==="
           echo "========================================="
           
-          # Step 3: Create OpenSearch Serverless Collection
-          echo "Step 3: Creating OpenSearch Serverless collection..."
-          # Add timestamp to ensure unique collection name
-          TIMESTAMP=$(date +%s)
-          COLLECTION_NAME="${PROJECT_NAME}-kb-${TIMESTAMP}"
+          # Step 3: Create or reuse OpenSearch Serverless Collection
+          echo "Step 3: Creating or reusing OpenSearch Serverless collection..."
+          
+          # Use a consistent collection name (no timestamp for reusability)
+          COLLECTION_NAME="${PROJECT_NAME}-kb-collection"
           echo "🔍 Debug: PROJECT_NAME='$PROJECT_NAME'"
           echo "🔍 Debug: COLLECTION_NAME='$COLLECTION_NAME'"
           echo "🔍 Debug: Collection name length: ${#COLLECTION_NAME}"
           
-          # Always create a new collection with unique name to avoid permission issues
-          echo "Creating new OpenSearch Serverless collection with proper permissions..."
+          # Check if collection already exists
+          EXISTING_COLLECTION_ARN=$(aws opensearchserverless list-collections \
+            --region "$CDK_DEFAULT_REGION" \
+            --query "collectionSummaries[?name=='$COLLECTION_NAME'].arn | [0]" \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -n "$EXISTING_COLLECTION_ARN" ] && [ "$EXISTING_COLLECTION_ARN" != "None" ] && [ "$EXISTING_COLLECTION_ARN" != "null" ]; then
+            echo "✓ Found existing OpenSearch collection: $EXISTING_COLLECTION_ARN"
+            COLLECTION_ARN="$EXISTING_COLLECTION_ARN"
             
-            # Create network security policy (only if it doesn't exist)
-            echo "Creating network security policy..."
-            if ! aws opensearchserverless get-security-policy --name "${PROJECT_NAME}-network-policy" --type network --region "$CDK_DEFAULT_REGION" >/dev/null 2>&1; then
+            # Check if collection is active
+            COLLECTION_STATUS=$(aws opensearchserverless list-collections \
+              --region "$CDK_DEFAULT_REGION" \
+              --query "collectionSummaries[?name=='$COLLECTION_NAME'].status | [0]" \
+              --output text)
+            
+            if [ "$COLLECTION_STATUS" = "ACTIVE" ]; then
+              echo "✓ Collection is already active"
+            else
+              echo "⚠ Collection exists but status is: $COLLECTION_STATUS"
+              echo "Waiting for collection to become active..."
+            fi
+          else
+            echo "Creating new OpenSearch Serverless collection..."
+            
+            # Create or update network security policy
+            echo "Creating/updating network security policy..."
+            if aws opensearchserverless get-security-policy --name "${PROJECT_NAME}-network-policy" --type network --region "$CDK_DEFAULT_REGION" >/dev/null 2>&1; then
+              echo "✓ Network security policy already exists, updating if needed..."
+              # Update the policy to include the current collection
+              aws opensearchserverless update-security-policy \
+                --name "${PROJECT_NAME}-network-policy" \
+                --type network \
+                --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"ResourceType":"collection"}],"AllowFromPublic":true}]' \
+                --region "$CDK_DEFAULT_REGION" && echo "✓ Network security policy updated"
+            else
               aws opensearchserverless create-security-policy \
                 --name "${PROJECT_NAME}-network-policy" \
                 --type network \
                 --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"ResourceType":"collection"}],"AllowFromPublic":true}]' \
                 --region "$CDK_DEFAULT_REGION" && echo "✓ Network security policy created"
-            else
-              echo "✓ Network security policy already exists"
             fi
             
-            # Create encryption security policy (only if it doesn't exist)
-            echo "Creating encryption security policy..."
-            if ! aws opensearchserverless get-security-policy --name "${PROJECT_NAME}-encryption-policy" --type encryption --region "$CDK_DEFAULT_REGION" >/dev/null 2>&1; then
+            # Create or update encryption security policy
+            echo "Creating/updating encryption security policy..."
+            if aws opensearchserverless get-security-policy --name "${PROJECT_NAME}-encryption-policy" --type encryption --region "$CDK_DEFAULT_REGION" >/dev/null 2>&1; then
+              echo "✓ Encryption security policy already exists, updating if needed..."
+              aws opensearchserverless update-security-policy \
+                --name "${PROJECT_NAME}-encryption-policy" \
+                --type encryption \
+                --policy '{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"ResourceType":"collection"}],"AWSOwnedKey":true}' \
+                --region "$CDK_DEFAULT_REGION" && echo "✓ Encryption security policy updated"
+            else
               aws opensearchserverless create-security-policy \
                 --name "${PROJECT_NAME}-encryption-policy" \
                 --type encryption \
                 --policy '{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"ResourceType":"collection"}],"AWSOwnedKey":true}' \
                 --region "$CDK_DEFAULT_REGION" && echo "✓ Encryption security policy created"
-            else
-              echo "✓ Encryption security policy already exists"
             fi
             
-            # Create data access policy (only if it doesn't exist)
-            echo "Creating data access policy..."
-            if ! aws opensearchserverless get-access-policy --name "${PROJECT_NAME}-data-access-policy" --type data --region "$CDK_DEFAULT_REGION" >/dev/null 2>&1; then
-              # Get CodeBuild role ARN for access policy
-              CODEBUILD_ROLE_ARN=$(aws sts get-caller-identity --query Arn --output text | sed 's/:user\//:role\//' | sed 's/\/[^\/]*$/\/codebuild-service-role/')
-              echo "🔍 Debug: CodeBuild role ARN: $CODEBUILD_ROLE_ARN"
-              
-              # Note: We'll add the Knowledge Base role after it's created
+            # Create or update data access policy
+            echo "Creating/updating data access policy..."
+            # Get CodeBuild role ARN for access policy
+            CODEBUILD_ROLE_ARN=$(aws sts get-caller-identity --query Arn --output text | sed 's/:user\//:role\//' | sed 's/\/[^\/]*$/\/codebuild-service-role/')
+            echo "🔍 Debug: CodeBuild role ARN: $CODEBUILD_ROLE_ARN"
+            
+            if aws opensearchserverless get-access-policy --name "${PROJECT_NAME}-data-access-policy" --type data --region "$CDK_DEFAULT_REGION" >/dev/null 2>&1; then
+              echo "✓ Data access policy already exists, will update with KB role later"
+            else
+              # Create new data access policy
               aws opensearchserverless create-access-policy \
                 --name "${PROJECT_NAME}-data-access-policy" \
                 --type data \
                 --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"Permission":["aoss:CreateCollectionItems","aoss:DeleteCollectionItems","aoss:UpdateCollectionItems","aoss:DescribeCollectionItems"],"ResourceType":"collection"},{"Resource":["index/'$COLLECTION_NAME'/*"],"Permission":["aoss:CreateIndex","aoss:DeleteIndex","aoss:UpdateIndex","aoss:DescribeIndex","aoss:ReadDocument","aoss:WriteDocument"],"ResourceType":"index"}],"Principal":["arn:aws:iam::'$AWS_ACCOUNT_ID':root","'$CODEBUILD_ROLE_ARN'"]}]' \
                 --region "$CDK_DEFAULT_REGION" && echo "✓ Data access policy created (will update with KB role later)"
-            else
-              echo "✓ Data access policy already exists"
             fi
             
             # Wait for policies to propagate
             echo "Waiting for policies to propagate..."
             sleep 15
             
-            # Create collection
-            echo "Creating OpenSearch Serverless collection..."
-            COLLECTION_CREATE_OUTPUT=$(aws opensearchserverless create-collection \
-              --name "$COLLECTION_NAME" \
-              --type VECTORSEARCH \
-              --description "Vector collection for America's Blood Centers knowledge base" \
-              --region "$CDK_DEFAULT_REGION" 2>&1)
-            
-            if [ $? -eq 0 ]; then
-              COLLECTION_ARN=$(echo "$COLLECTION_CREATE_OUTPUT" | jq -r '.createCollectionDetail.arn // empty')
-              echo "✓ Collection creation initiated: $COLLECTION_ARN"
-            else
-              echo "✗ Failed to create OpenSearch collection"
-              echo "Error: $COLLECTION_CREATE_OUTPUT"
-              exit 1
+            # Create collection only if it doesn't exist
+            if [ -z "$EXISTING_COLLECTION_ARN" ]; then
+              echo "Creating OpenSearch Serverless collection..."
+              COLLECTION_CREATE_OUTPUT=$(aws opensearchserverless create-collection \
+                --name "$COLLECTION_NAME" \
+                --type VECTORSEARCH \
+                --description "Vector collection for America's Blood Centers knowledge base" \
+                --region "$CDK_DEFAULT_REGION" 2>&1)
+              
+              if [ $? -eq 0 ]; then
+                COLLECTION_ARN=$(echo "$COLLECTION_CREATE_OUTPUT" | jq -r '.createCollectionDetail.arn // empty')
+                echo "✓ Collection creation initiated: $COLLECTION_ARN"
+              else
+                echo "✗ Failed to create OpenSearch collection"
+                echo "Error: $COLLECTION_CREATE_OUTPUT"
+                exit 1
+              fi
             fi
           fi
           
@@ -235,78 +270,93 @@ phases:
           
           echo "🔍 Debug: Current policy version: $POLICY_VERSION"
           
+          # Get CodeBuild role ARN for the policy update
+          CODEBUILD_ROLE_ARN=$(aws sts get-caller-identity --query Arn --output text | sed 's/:user\//:role\//' | sed 's/\/[^\/]*$/\/codebuild-service-role/')
+          
           # Update the data access policy to include the Knowledge Base role
           echo "Updating data access policy to include Knowledge Base role..."
           aws opensearchserverless update-access-policy \
             --name "${PROJECT_NAME}-data-access-policy" \
             --type data \
             --policy-version "$POLICY_VERSION" \
-            --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"Permission":["aoss:CreateCollectionItems","aoss:DeleteCollectionItems","aoss:UpdateCollectionItems","aoss:DescribeCollectionItems"],"ResourceType":"collection"},{"Resource":["index/'$COLLECTION_NAME'/*"],"Permission":["aoss:CreateIndex","aoss:DeleteIndex","aoss:UpdateIndex","aoss:DescribeIndex","aoss:ReadDocument","aoss:WriteDocument"],"ResourceType":"index"}],"Principal":["arn:aws:iam::'$AWS_ACCOUNT_ID':root","'$KB_ROLE_ARN'"]}]' \
+            --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"Permission":["aoss:CreateCollectionItems","aoss:DeleteCollectionItems","aoss:UpdateCollectionItems","aoss:DescribeCollectionItems"],"ResourceType":"collection"},{"Resource":["index/'$COLLECTION_NAME'/*"],"Permission":["aoss:CreateIndex","aoss:DeleteIndex","aoss:UpdateIndex","aoss:DescribeIndex","aoss:ReadDocument","aoss:WriteDocument"],"ResourceType":"index"}],"Principal":["arn:aws:iam::'$AWS_ACCOUNT_ID':root","'$CODEBUILD_ROLE_ARN'","'$KB_ROLE_ARN'"]}]' \
             --region "$CDK_DEFAULT_REGION" && echo "✓ Data access policy updated with Knowledge Base role"
           
           # Wait for policy update to propagate
           echo "Waiting for policy update to propagate..."
           sleep 10
           
-          # Step 4.6: Create the required vector index manually
+          # Step 4.6: Create the required vector index manually (if it doesn't exist)
           echo "Step 4.6: Creating vector index in OpenSearch collection..."
           
           # Get the collection ID from the ARN
           COLLECTION_ID=$(echo "$COLLECTION_ARN" | sed 's/.*collection\///')
           echo "🔍 Debug: Collection ID extracted: $COLLECTION_ID"
           
-          # Create the index using AWS CLI (now that we have proper permissions)
-          echo "Creating bedrock-knowledge-base-default-index..."
-          echo "🔍 Debug: Using collection ID: $COLLECTION_ID"
-          echo "🔍 Debug: Region: $CDK_DEFAULT_REGION"
-          
-          # Try to create the index and capture both stdout and stderr
-          set +e  # Temporarily disable exit on error
-          INDEX_CREATION_OUTPUT=$(aws opensearchserverless create-index \
+          # Check if index already exists
+          echo "Checking if vector index already exists..."
+          INDEX_EXISTS=$(aws opensearchserverless list-indexes \
             --region "$CDK_DEFAULT_REGION" \
-            --id "$COLLECTION_ID" \
-            --index-name "bedrock-knowledge-base-default-index" \
-            --index-schema '{
-              "settings": {
-                "index.knn": true
-              },
-              "mappings": {
-                "properties": {
-                  "bedrock-knowledge-base-default-vector": {
-                    "type": "knn_vector",
-                    "dimension": 1536,
-                    "method": {
-                      "name": "hnsw",
-                      "engine": "faiss",
-                      "parameters": {
-                        "ef_construction": 512,
-                        "m": 16
+            --collection-id "$COLLECTION_ID" \
+            --query 'indexDetails[?name==`bedrock-knowledge-base-default-index`].name | [0]' \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -n "$INDEX_EXISTS" ] && [ "$INDEX_EXISTS" != "None" ] && [ "$INDEX_EXISTS" != "null" ]; then
+            echo "✓ Vector index already exists: bedrock-knowledge-base-default-index"
+          else
+            # Create the index using AWS CLI (now that we have proper permissions)
+            echo "Creating bedrock-knowledge-base-default-index..."
+            echo "🔍 Debug: Using collection ID: $COLLECTION_ID"
+            echo "🔍 Debug: Region: $CDK_DEFAULT_REGION"
+            
+            # Try to create the index and capture both stdout and stderr
+            set +e  # Temporarily disable exit on error
+            INDEX_CREATION_OUTPUT=$(aws opensearchserverless create-index \
+              --region "$CDK_DEFAULT_REGION" \
+              --id "$COLLECTION_ID" \
+              --index-name "bedrock-knowledge-base-default-index" \
+              --index-schema '{
+                "settings": {
+                  "index.knn": true
+                },
+                "mappings": {
+                  "properties": {
+                    "bedrock-knowledge-base-default-vector": {
+                      "type": "knn_vector",
+                      "dimension": 1536,
+                      "method": {
+                        "name": "hnsw",
+                        "engine": "faiss",
+                        "parameters": {
+                          "ef_construction": 512,
+                          "m": 16
+                        }
                       }
+                    },
+                    "AMAZON_BEDROCK_TEXT_CHUNK": {
+                      "type": "text"
+                    },
+                    "AMAZON_BEDROCK_METADATA": {
+                      "type": "text"
                     }
-                  },
-                  "AMAZON_BEDROCK_TEXT_CHUNK": {
-                    "type": "text"
-                  },
-                  "AMAZON_BEDROCK_METADATA": {
-                    "type": "text"
                   }
                 }
-              }
-            }' 2>&1)
-          INDEX_EXIT_CODE=$?
-          set -e  # Re-enable exit on error
-          
-          echo "🔍 Debug: Index creation exit code: $INDEX_EXIT_CODE"
-          echo "🔍 Debug: Index creation output: $INDEX_CREATION_OUTPUT"
-          
-          if echo "$INDEX_CREATION_OUTPUT" | grep -q "indexDetail"; then
-            echo "✓ Vector index created successfully"
-            echo "Index details: $INDEX_CREATION_OUTPUT"
-          elif echo "$INDEX_CREATION_OUTPUT" | grep -q "already exists\|ResourceAlreadyExistsException"; then
-            echo "✓ Index already exists, continuing..."
-          else
-            echo "⚠ Index creation response: $INDEX_CREATION_OUTPUT"
-            echo "⚠ Index creation may have failed, but continuing..."
+              }' 2>&1)
+            INDEX_EXIT_CODE=$?
+            set -e  # Re-enable exit on error
+            
+            echo "🔍 Debug: Index creation exit code: $INDEX_EXIT_CODE"
+            echo "🔍 Debug: Index creation output: $INDEX_CREATION_OUTPUT"
+            
+            if echo "$INDEX_CREATION_OUTPUT" | grep -q "indexDetail"; then
+              echo "✓ Vector index created successfully"
+              echo "Index details: $INDEX_CREATION_OUTPUT"
+            elif echo "$INDEX_CREATION_OUTPUT" | grep -q "already exists\|ResourceAlreadyExistsException"; then
+              echo "✓ Index already exists, continuing..."
+            else
+              echo "⚠ Index creation response: $INDEX_CREATION_OUTPUT"
+              echo "⚠ Index creation may have failed, but continuing..."
+            fi
           fi
           
           # Wait for index to be ready
@@ -464,7 +514,7 @@ phases:
                 "type": "S3",
                 "s3Configuration": {
                   "bucketArn": "'"$BUCKET_ARN"'",
-                  "inclusionPrefixes": ["documents/"]
+                  "inclusionPrefixes": ["pdfs/"]
                 }
               }' \
               --vector-ingestion-configuration '{
@@ -511,15 +561,15 @@ phases:
             SEED_URLS=""
             
             # Read daily-sync.txt for daily URLs
-            if aws s3 ls "s3://$DOCUMENTS_BUCKET/documents/daily-sync.txt" >/dev/null 2>&1; then
-              DAILY_URLS=$(aws s3 cp "s3://$DOCUMENTS_BUCKET/documents/daily-sync.txt" - | grep -v '^#' | grep -v '^$')
+            if aws s3 ls "s3://$DOCUMENTS_BUCKET/daily-sync.txt" >/dev/null 2>&1; then
+              DAILY_URLS=$(aws s3 cp "s3://$DOCUMENTS_BUCKET/daily-sync.txt" - | grep -v '^#' | grep -v '^$')
               echo "Found daily sync URLs:"
               echo "$DAILY_URLS"
             fi
             
             # Read urls.txt for regular URLs
-            if aws s3 ls "s3://$DOCUMENTS_BUCKET/documents/urls.txt" >/dev/null 2>&1; then
-              REGULAR_URLS=$(aws s3 cp "s3://$DOCUMENTS_BUCKET/documents/urls.txt" - | grep -v '^#' | grep -v '^$')
+            if aws s3 ls "s3://$DOCUMENTS_BUCKET/urls.txt" >/dev/null 2>&1; then
+              REGULAR_URLS=$(aws s3 cp "s3://$DOCUMENTS_BUCKET/urls.txt" - | grep -v '^#' | grep -v '^$')
               echo "Found regular URLs:"
               echo "$REGULAR_URLS"
             fi
@@ -609,7 +659,7 @@ phases:
           echo "=== PHASE 5: Document Upload ==="
           echo "✓ Documents already uploaded by CDK BucketDeployment"
           echo "✓ PDFs deployed to s3://$DOCUMENTS_BUCKET/pdfs/"
-          echo "✓ Text files deployed to s3://$DOCUMENTS_BUCKET/documents/"
+          echo "✓ Text files deployed to s3://$DOCUMENTS_BUCKET/ (root level)"
           
           echo "✓ Initial documents uploaded"
           
@@ -841,11 +891,11 @@ phases:
             echo "✓ Schedule: Daily at 7 PM UTC (2 PM EST)"
             
             # Check if daily-sync.txt exists for URL configuration
-            if aws s3 ls "s3://$DOCUMENTS_BUCKET/documents/daily-sync.txt" >/dev/null 2>&1; then
+            if aws s3 ls "s3://$DOCUMENTS_BUCKET/daily-sync.txt" >/dev/null 2>&1; then
               echo "✓ Found daily-sync.txt - URLs will be read dynamically"
             else
               echo "📋 To configure daily sync URLs:"
-              echo "1. Upload daily-sync.txt to s3://$DOCUMENTS_BUCKET/documents/"
+              echo "1. Upload daily-sync.txt to s3://$DOCUMENTS_BUCKET/"
               echo "2. Add URLs (one per line) that should be synced daily"
               echo "3. The Lambda function will read these URLs automatically"
             fi
