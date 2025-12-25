@@ -205,8 +205,9 @@ phases:
           fi
           
           # Create collection only if it doesn't exist
-          if [ -z "$EXISTING_COLLECTION_ARN" ]; then
-            echo "🔍 Debug: EXISTING_COLLECTION_ARN is empty, creating new collection"
+          if [ -z "$EXISTING_COLLECTION_ARN" ] || [ "$EXISTING_COLLECTION_ARN" = "None" ] || [ "$EXISTING_COLLECTION_ARN" = "null" ]; then
+            echo "🔍 Debug: EXISTING_COLLECTION_ARN is empty/None/null, creating new collection"
+            echo "🔍 Debug: EXISTING_COLLECTION_ARN value: '$EXISTING_COLLECTION_ARN'"
             echo "Creating OpenSearch Serverless collection..."
             COLLECTION_CREATE_OUTPUT=$(aws opensearchserverless create-collection \
               --name "$COLLECTION_NAME" \
@@ -228,6 +229,7 @@ phases:
             fi
           else
             echo "🔍 Debug: Using existing collection: $EXISTING_COLLECTION_ARN"
+            COLLECTION_ARN="$EXISTING_COLLECTION_ARN"
           fi
           
           # Step 4: Wait for collection to be active
@@ -741,6 +743,15 @@ phases:
           # Check if we're in a CodeBuild environment and have access to the Frontend directory
           if [ -d "../Frontend" ]; then
             echo "Deploying React frontend to AWS Amplify..."
+            
+            # Debug: Show current directory and Frontend structure
+            echo "🔍 Debug: Current directory: $(pwd)"
+            echo "🔍 Debug: Checking Frontend directory..."
+            ls -la ../Frontend/ || echo "Frontend directory not accessible"
+            echo "🔍 Debug: Checking Frontend/public directory..."
+            ls -la ../Frontend/public/ || echo "Frontend/public directory not accessible"
+            echo "🔍 Debug: Checking for index.html specifically..."
+            [ -f "../Frontend/public/index.html" ] && echo "✓ index.html found" || echo "✗ index.html NOT found"
             
             # Create Amplify app
             AMPLIFY_APP_NAME="${PROJECT_NAME}-chatbot"
