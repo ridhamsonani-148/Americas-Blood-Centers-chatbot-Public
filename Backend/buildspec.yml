@@ -135,10 +135,18 @@ phases:
             echo "Creating/updating network security policy..."
             if aws opensearchserverless get-security-policy --name "${PROJECT_NAME}-network-policy" --type network --region "$CDK_DEFAULT_REGION" >/dev/null 2>&1; then
               echo "✓ Network security policy already exists, updating if needed..."
+              # Get current policy version
+              NETWORK_POLICY_VERSION=$(aws opensearchserverless get-security-policy \
+                --name "${PROJECT_NAME}-network-policy" \
+                --type network \
+                --region "$CDK_DEFAULT_REGION" \
+                --query 'securityPolicyDetail.policyVersion' \
+                --output text)
               # Update the policy to include the current collection
               aws opensearchserverless update-security-policy \
                 --name "${PROJECT_NAME}-network-policy" \
                 --type network \
+                --policy-version "$NETWORK_POLICY_VERSION" \
                 --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"ResourceType":"collection"}],"AllowFromPublic":true}]' \
                 --region "$CDK_DEFAULT_REGION" && echo "✓ Network security policy updated"
             else
@@ -153,9 +161,17 @@ phases:
             echo "Creating/updating encryption security policy..."
             if aws opensearchserverless get-security-policy --name "${PROJECT_NAME}-encryption-policy" --type encryption --region "$CDK_DEFAULT_REGION" >/dev/null 2>&1; then
               echo "✓ Encryption security policy already exists, updating if needed..."
+              # Get current policy version
+              ENCRYPTION_POLICY_VERSION=$(aws opensearchserverless get-security-policy \
+                --name "${PROJECT_NAME}-encryption-policy" \
+                --type encryption \
+                --region "$CDK_DEFAULT_REGION" \
+                --query 'securityPolicyDetail.policyVersion' \
+                --output text)
               aws opensearchserverless update-security-policy \
                 --name "${PROJECT_NAME}-encryption-policy" \
                 --type encryption \
+                --policy-version "$ENCRYPTION_POLICY_VERSION" \
                 --policy '{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"ResourceType":"collection"}],"AWSOwnedKey":true}' \
                 --region "$CDK_DEFAULT_REGION" && echo "✓ Encryption security policy updated"
             else
@@ -236,9 +252,19 @@ phases:
                 --query "collectionSummaries[?name=='$COLLECTION_NAME']" \
                 --output json
               exit 1
-            elif [ "$STATUS" = "ERROR" ] || [ -z "$STATUS" ]; then
-              echo "✗ Failed to get collection status"
-              exit 1
+            elif [ "$STATUS" = "ERROR" ] || [ -z "$STATUS" ] || [ "$STATUS" = "None" ] || [ "$STATUS" = "null" ]; then
+              echo "✗ Failed to get collection status or collection doesn't exist"
+              echo "🔍 Debug: Checking if collection was actually created..."
+              aws opensearchserverless list-collections \
+                --region "$CDK_DEFAULT_REGION" \
+                --query "collectionSummaries[?name=='$COLLECTION_NAME']" \
+                --output json
+              
+              # If no collection found after some time, exit
+              if [ $ELAPSED -gt 300 ]; then
+                echo "✗ Collection not found after 5 minutes, something went wrong"
+                exit 1
+              fi
             fi
             
             sleep 30
