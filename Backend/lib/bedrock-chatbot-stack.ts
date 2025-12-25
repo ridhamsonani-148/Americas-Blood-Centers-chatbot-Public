@@ -77,6 +77,18 @@ export class BedrockChatbotStack extends cdk.Stack {
                 `arn:aws:bedrock:${this.region}::foundation-model/${embeddingModelId}`,
               ],
             }),
+            // Bedrock Data Automation access for advanced PDF parsing
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'bedrock:InvokeDataAutomationAsync',
+                'bedrock:GetDataAutomationStatus',
+              ],
+              resources: [
+                `arn:aws:bedrock:${this.region}:aws:data-automation-project/public-rag-default`,
+                `arn:aws:bedrock:${this.region}:${this.account}:data-automation-project/*`,
+              ],
+            }),
             // S3 access for documents
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
