@@ -805,23 +805,21 @@ phases:
             if [ ! -f "public/index.html" ] || [ ! -r "public/index.html" ]; then
               echo "⚠ index.html missing or not readable, creating it..."
               mkdir -p public
-              cat > public/index.html << EOF
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#B71C1C" />
-    <meta name="description" content="America's Blood Centers AI Assistant" />
-    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <title>America's Blood Centers - AI Assistant</title>
-  </head>
-  <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
-  </body>
-</html>
-EOF
+              echo '<!DOCTYPE html>' > public/index.html
+              echo '<html lang="en">' >> public/index.html
+              echo '  <head>' >> public/index.html
+              echo '    <meta charset="utf-8" />' >> public/index.html
+              echo '    <meta name="viewport" content="width=device-width, initial-scale=1" />' >> public/index.html
+              echo '    <meta name="theme-color" content="#B71C1C" />' >> public/index.html
+              echo '    <meta name="description" content="America'\''s Blood Centers AI Assistant" />' >> public/index.html
+              echo '    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />' >> public/index.html
+              echo '    <title>America'\''s Blood Centers - AI Assistant</title>' >> public/index.html
+              echo '  </head>' >> public/index.html
+              echo '  <body>' >> public/index.html
+              echo '    <noscript>You need to enable JavaScript to run this app.</noscript>' >> public/index.html
+              echo '    <div id="root"></div>' >> public/index.html
+              echo '  </body>' >> public/index.html
+              echo '</html>' >> public/index.html
               echo "✓ index.html created"
             else
               echo "✓ index.html exists and is readable"
@@ -830,16 +828,14 @@ EOF
             # Ensure manifest.json exists
             if [ ! -f "public/manifest.json" ]; then
               echo "⚠ manifest.json missing, creating it..."
-              cat > public/manifest.json << EOF
-{
-  "short_name": "ABC Assistant",
-  "name": "America's Blood Centers AI Assistant",
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#B71C1C",
-  "background_color": "#ffffff"
-}
-EOF
+              echo '{' > public/manifest.json
+              echo '  "short_name": "ABC Assistant",' >> public/manifest.json
+              echo '  "name": "America'\''s Blood Centers AI Assistant",' >> public/manifest.json
+              echo '  "start_url": ".",' >> public/manifest.json
+              echo '  "display": "standalone",' >> public/manifest.json
+              echo '  "theme_color": "#B71C1C",' >> public/manifest.json
+              echo '  "background_color": "#ffffff"' >> public/manifest.json
+              echo '}' >> public/manifest.json
               echo "✓ manifest.json created"
             fi
             
@@ -868,23 +864,21 @@ EOF
               
               # Try to create a minimal build directory
               mkdir -p build
-              cat > build/index.html << EOF
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>America's Blood Centers - AI Assistant</title>
-</head>
-<body>
-    <div id="root">
-        <h1>America's Blood Centers AI Assistant</h1>
-        <p>The application is being deployed. Please check back shortly.</p>
-        <p>API Endpoint: <code>$API_URL</code></p>
-    </div>
-</body>
-</html>
-EOF
+              echo '<!DOCTYPE html>' > build/index.html
+              echo '<html lang="en">' >> build/index.html
+              echo '<head>' >> build/index.html
+              echo '    <meta charset="utf-8" />' >> build/index.html
+              echo '    <meta name="viewport" content="width=device-width, initial-scale=1" />' >> build/index.html
+              echo '    <title>America'\''s Blood Centers - AI Assistant</title>' >> build/index.html
+              echo '</head>' >> build/index.html
+              echo '<body>' >> build/index.html
+              echo '    <div id="root">' >> build/index.html
+              echo '        <h1>America'\''s Blood Centers AI Assistant</h1>' >> build/index.html
+              echo '        <p>The application is being deployed. Please check back shortly.</p>' >> build/index.html
+              echo '        <p>API Endpoint: <code>'$API_URL'</code></p>' >> build/index.html
+              echo '    </div>' >> build/index.html
+              echo '</body>' >> build/index.html
+              echo '</html>' >> build/index.html
               echo "✓ Created fallback build"
             fi
             
