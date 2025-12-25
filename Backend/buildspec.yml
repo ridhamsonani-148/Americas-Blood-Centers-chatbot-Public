@@ -202,25 +202,32 @@ phases:
             # Wait for policies to propagate
             echo "Waiting for policies to propagate..."
             sleep 15
+          fi
+          
+          # Create collection only if it doesn't exist
+          if [ -z "$EXISTING_COLLECTION_ARN" ]; then
+            echo "🔍 Debug: EXISTING_COLLECTION_ARN is empty, creating new collection"
+            echo "Creating OpenSearch Serverless collection..."
+            COLLECTION_CREATE_OUTPUT=$(aws opensearchserverless create-collection \
+              --name "$COLLECTION_NAME" \
+              --type VECTORSEARCH \
+              --description "Vector collection for America's Blood Centers knowledge base" \
+              --region "$CDK_DEFAULT_REGION" 2>&1)
             
-            # Create collection only if it doesn't exist
-            if [ -z "$EXISTING_COLLECTION_ARN" ]; then
-              echo "Creating OpenSearch Serverless collection..."
-              COLLECTION_CREATE_OUTPUT=$(aws opensearchserverless create-collection \
-                --name "$COLLECTION_NAME" \
-                --type VECTORSEARCH \
-                --description "Vector collection for America's Blood Centers knowledge base" \
-                --region "$CDK_DEFAULT_REGION" 2>&1)
-              
-              if [ $? -eq 0 ]; then
-                COLLECTION_ARN=$(echo "$COLLECTION_CREATE_OUTPUT" | jq -r '.createCollectionDetail.arn // empty')
-                echo "✓ Collection creation initiated: $COLLECTION_ARN"
-              else
-                echo "✗ Failed to create OpenSearch collection"
-                echo "Error: $COLLECTION_CREATE_OUTPUT"
-                exit 1
-              fi
+            COLLECTION_CREATE_EXIT_CODE=$?
+            echo "🔍 Debug: Collection creation exit code: $COLLECTION_CREATE_EXIT_CODE"
+            echo "🔍 Debug: Collection creation output: $COLLECTION_CREATE_OUTPUT"
+            
+            if [ $COLLECTION_CREATE_EXIT_CODE -eq 0 ]; then
+              COLLECTION_ARN=$(echo "$COLLECTION_CREATE_OUTPUT" | jq -r '.createCollectionDetail.arn // empty')
+              echo "✓ Collection creation initiated: $COLLECTION_ARN"
+            else
+              echo "✗ Failed to create OpenSearch collection"
+              echo "Error: $COLLECTION_CREATE_OUTPUT"
+              exit 1
             fi
+          else
+            echo "🔍 Debug: Using existing collection: $EXISTING_COLLECTION_ARN"
           fi
           
           # Step 4: Wait for collection to be active
