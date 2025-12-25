@@ -311,7 +311,93 @@ export class BedrockChatbotStack extends cdk.Stack {
     const healthResource = api.root.addResource('health');
     healthResource.addMethod('GET', chatIntegration);
 
-    // ===== Data Ingestion Lambda =====
+    // ===== Amplify Deployer Lambda =====
+    const amplifyDeployerRole = new iam.Role(this, 'AmplifyDeployerRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      ],
+      inlinePolicies: {
+        AmplifyDeployerPolicy: new iam.PolicyDocument({
+          statements: [
+            // Amplify access for deployment
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'amplify:StartDeployment',
+                'amplify:GetDeployment',
+                'amplify:ListDeployments',
+                'amplify:GetApp',
+                'amplify:GetBranch',
+                'amplify:ListApps',
+                'amplify:ListBranches',
+              ],
+              resources: ['*'],
+            }),
+            // S3 access for build artifacts
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                's3:GetObject',
+                's3:ListBucket',
+              ],
+              resources: [
+                buildsBucket.bucketArn,
+                `${buildsBucket.bucketArn}/*`,
+              ],
+            }),
+          ],
+        }),
+      },
+    });
+
+    const amplifyDeployerLambda = new lambda.Function(this, 'AmplifyDeployerFunction', {
+      runtime: lambda.Runtime.PYTHON_3_11,
+      handler: 'amplify_deployer.lambda_handler',
+      code: lambda.Code.fromAsset('lambda'),
+      role: amplifyDeployerRole,
+      timeout: cdk.Duration.minutes(5),
+      memorySize: 256,
+      environment: {
+        AMPLIFY_APP_ID: 'PLACEHOLDER_APP_ID', // Will be updated after Amplify app creation
+        AMPLIFY_BRANCH_NAME: 'main',
+      },
+      description: 'Automated Amplify deployment handler',
+    });
+
+    // EventBridge rule to trigger Amplify deployment on S3 upload
+    const amplifyDeploymentRule = new events.Rule(this, 'AmplifyDeploymentRule', {
+      eventPattern: {
+        source: ['aws.s3'],
+        detailType: ['Object Created'],
+        detail: {
+          bucket: {
+            name: [buildsBucket.bucketName],
+          },
+          object: {
+            key: [{ prefix: 'builds/' }],
+          },
+        },
+      },
+      description: 'Trigger Amplify deployment when build is uploaded to S3',
+    });
+
+    amplifyDeploymentRule.addTarget(
+      new targets.LambdaFunction(amplifyDeployerLambda, {
+        event: events.RuleTargetInput.fromObject({
+          bucket: buildsBucket.bucketName,
+          key: events.EventField.fromPath('$.detail.object.key'),
+        }),
+      })
+    );
+
+    amplifyDeployerLambda.addPermission('AllowEventBridgeInvokeAmplify', {
+      principal: new iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: amplifyDeploymentRule.ruleArn,
+    });
+
+    // Enable S3 event notifications for EventBridge
+    buildsBucket.enableEventBridgeNotification();
     const dataIngestionLambda = new lambda.Function(this, 'DataIngestionFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'data_ingestion.lambda_handler',
@@ -427,6 +513,11 @@ export class BedrockChatbotStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DataIngestionFunctionName', {
       value: dataIngestionLambda.functionName,
       description: 'Data Ingestion Lambda Function Name',
+    });
+
+    new cdk.CfnOutput(this, 'AmplifyDeployerFunctionName', {
+      value: amplifyDeployerLambda.functionName,
+      description: 'Amplify Deployer Lambda Function Name',
     });
 
     new cdk.CfnOutput(this, 'ProjectName', {
