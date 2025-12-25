@@ -905,24 +905,37 @@ phases:
               aws s3 cp build.zip "s3://$BUILD_BUCKET/$BUILD_KEY" 2>/dev/null || echo "⚠ Could not upload to S3"
             fi
             
-            # Start Amplify deployment
-            echo "Starting Amplify deployment..."
-            JOB_ID=$(aws amplify start-deployment \
-              --app-id "$AMPLIFY_APP_ID" \
-              --branch-name "main" \
-              --source-url "s3://$BUILD_BUCKET/$BUILD_KEY" \
-              --query 'jobSummary.jobId' --output text 2>/dev/null || echo "MANUAL")
+            # Configure AmplifyDeployer Lambda for automatic deployment
+            echo "Configuring automatic deployment via AmplifyDeployer Lambda..."
             
-            if [ "$JOB_ID" != "MANUAL" ]; then
-              echo "✓ Amplify deployment started: $JOB_ID"
+            # Get AmplifyDeployer function name from CDK outputs
+            AMPLIFY_DEPLOYER_FUNCTION_NAME=$(aws cloudformation describe-stacks \
+              --stack-name "$STACK_NAME" \
+              --query "Stacks[0].Outputs[?OutputKey=='AmplifyDeployerFunctionName'].OutputValue | [0]" \
+              --output text 2>/dev/null || echo "")
+            
+            if [ -n "$AMPLIFY_DEPLOYER_FUNCTION_NAME" ] && [ "$AMPLIFY_DEPLOYER_FUNCTION_NAME" != "None" ]; then
+              echo "✓ Found AmplifyDeployer Lambda: $AMPLIFY_DEPLOYER_FUNCTION_NAME"
+              
+              # Update AmplifyDeployer Lambda with Amplify app details
+              aws lambda update-function-configuration \
+                --function-name "$AMPLIFY_DEPLOYER_FUNCTION_NAME" \
+                --environment "Variables={AMPLIFY_APP_ID=$AMPLIFY_APP_ID,AMPLIFY_BRANCH_NAME=main}" \
+                --region "$CDK_DEFAULT_REGION"
+              
+              echo "✓ AmplifyDeployer configured with app ID: $AMPLIFY_APP_ID"
+              echo "🚀 Automated deployment will start via EventBridge trigger"
+              echo "📱 Frontend will be available at: https://main.$AMPLIFY_APP_ID.amplifyapp.com"
+              echo "⏱️ Deployment typically completes in 2-3 minutes"
+              
               FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com"
-              echo "✓ Frontend will be available at: $FRONTEND_URL"
             else
-              echo "⚠ Automatic deployment failed. Manual deployment required."
-              echo "📋 Manual steps:"
-              echo "1. Go to AWS Amplify Console"
-              echo "2. Select app: $AMPLIFY_APP_NAME"
-              echo "3. Deploy the build.zip file manually"
+              echo "⚠ AmplifyDeployer Lambda not found, falling back to manual deployment"
+              echo "📋 Manual deployment options:"
+              echo "1. AWS Amplify Console: https://console.aws.amazon.com/amplify/home#/$AMPLIFY_APP_ID"
+              echo "2. Use the uploaded build: s3://$BUILD_BUCKET/$BUILD_KEY"
+              echo "3. Or deploy manually with AWS CLI:"
+              echo "   aws amplify start-deployment --app-id $AMPLIFY_APP_ID --branch-name main --source-url s3://$BUILD_BUCKET/$BUILD_KEY"
               FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (manual deployment required)"
             fi
             
@@ -1044,6 +1057,7 @@ phases:
           echo "🕷️ Web Ingestion Job ID: $WEB_INGESTION_JOB_ID"
           echo "🌐 API Gateway URL: $API_URL"
           echo "💻 Frontend URL: ${FRONTEND_URL:-Not deployed}"
+          echo "🚀 Deployment Type: Automated via EventBridge + AmplifyDeployer Lambda"
           echo "========================================="
           echo ""
           echo "========================================="
