@@ -114,10 +114,11 @@ export class BedrockChatbotStack extends cdk.Stack {
               actions: [
                 'bedrock:InvokeDataAutomationAsync',
                 'bedrock:GetDataAutomationStatus',
+                'bedrock:ListDataAutomationJobs',
               ],
               resources: [
-                `arn:aws:bedrock:${this.region}:aws:data-automation-project/public-rag-default`,
-                `arn:aws:bedrock:${this.region}:${this.account}:data-automation-project/*`,
+                `arn:aws:bedrock:${this.region}:${this.account}:data-automation-profile/*`,
+                `arn:aws:bedrock:${this.region}:aws:data-automation-profile/us.data-automation-v1`,
               ],
             }),
             // S3 access for documents

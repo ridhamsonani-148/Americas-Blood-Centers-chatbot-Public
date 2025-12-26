@@ -88,37 +88,48 @@ function ChatBody({ language = 'en' }) {
         sx={{
           flex: "1 1 auto",
           overflowY: "auto",
-          padding: "1rem 0",
-          minHeight: 0, // Allow flex item to shrink
+          paddingBottom: "1rem",
+          minHeight: 0,
         }}
       >
+        {/* FAQ Examples - Only show when there's just the welcome message */}
         {messages.length === 1 && (
           <Box sx={{ marginBottom: "2rem" }}>
             <FAQExamples onPromptClick={handlePromptClick} language={language} />
           </Box>
         )}
 
-        {messages.map((message) => (
-          <Box key={message.id}>
-            {message.sender === 'user' ? (
-              <UserReply message={message.text} />
-            ) : (
-              <BotReply 
-                message={message.text} 
-                sources={message.sources}
-              />
-            )}
-          </Box>
-        ))}
+        {/* Messages */}
+        <Box sx={{ maxWidth: "1000px", margin: "0 auto", width: "100%" }}>
+          {messages.map((message) => (
+            <Box key={message.id} sx={{ marginBottom: "1rem" }}>
+              {message.sender === 'user' ? (
+                <UserReply message={message.text} />
+              ) : (
+                <BotReply 
+                  message={message.text} 
+                  sources={message.sources}
+                />
+              )}
+            </Box>
+          ))}
 
-        {processing && (
-          <Box sx={{ display: "flex", alignItems: "center", marginTop: "1.5rem" }}>
-            <CircularProgress size={20} sx={{ marginRight: "0.5rem" }} />
-            <Typography variant="body2" color="textSecondary">
-              {language === 'es' ? 'Escribiendo...' : 'Typing...'}
-            </Typography>
-          </Box>
-        )}
+          {processing && (
+            <Box 
+              sx={{ 
+                display: "flex", 
+                alignItems: "center", 
+                marginTop: "1rem",
+                marginBottom: "1rem",
+              }}
+            >
+              <CircularProgress size={20} sx={{ marginRight: "0.5rem" }} />
+              <Typography variant="body2" color="textSecondary">
+                {language === 'es' ? 'Escribiendo...' : 'Typing...'}
+              </Typography>
+            </Box>
+          )}
+        </Box>
 
         <div ref={messagesEndRef} />
       </Box>
@@ -127,7 +138,10 @@ function ChatBody({ language = 'en' }) {
       <Box
         sx={{
           flexShrink: 0,
-          padding: "1rem 0",
+          paddingTop: "1rem",
+          maxWidth: "1000px",
+          margin: "0 auto",
+          width: "100%",
         }}
       >
         <ChatInput onSendMessage={sendMessage} processing={processing} language={language} />

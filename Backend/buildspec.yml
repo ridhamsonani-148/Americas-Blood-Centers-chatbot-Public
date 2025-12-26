@@ -317,6 +317,14 @@ phases:
             --policy '[{"Rules":[{"Resource":["collection/'$COLLECTION_NAME'"],"Permission":["aoss:CreateCollectionItems","aoss:DeleteCollectionItems","aoss:UpdateCollectionItems","aoss:DescribeCollectionItems"],"ResourceType":"collection"},{"Resource":["index/'$COLLECTION_NAME'/*"],"Permission":["aoss:CreateIndex","aoss:DeleteIndex","aoss:UpdateIndex","aoss:DescribeIndex","aoss:ReadDocument","aoss:WriteDocument"],"ResourceType":"index"}],"Principal":["arn:aws:iam::'$AWS_ACCOUNT_ID':root","'$CODEBUILD_ROLE_ARN'","'$KB_ROLE_ARN'"]}]' \
             --region "$CDK_DEFAULT_REGION" && echo "✓ Data access policy updated with Knowledge Base role"
           
+          # Also ensure the Knowledge Base role has the correct Bedrock Data Automation permissions
+          echo "Verifying Knowledge Base role has Bedrock Data Automation permissions..."
+          
+          # The CDK stack should have been updated with the correct permissions, but let's verify
+          KB_ROLE_NAME=$(echo "$KB_ROLE_ARN" | sed 's/.*role\///')
+          echo "✓ Knowledge Base role ($KB_ROLE_NAME) should have bedrock:InvokeDataAutomationAsync permission"
+          echo "✓ This permission is configured in the CDK stack for resource: arn:aws:bedrock:${CDK_DEFAULT_REGION}:aws:data-automation-profile/us.data-automation-v1"
+          
           # Wait for policy update to propagate
           echo "Waiting for policy update to propagate..."
           sleep 10

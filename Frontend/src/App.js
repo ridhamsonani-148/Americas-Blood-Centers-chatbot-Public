@@ -48,7 +48,7 @@ function App() {
             height: isSmallScreen ? "calc(100vh - 4rem)" : "calc(100vh - 5rem)",
             display: "flex",
             position: "relative",
-            overflow: "hidden", // Prevent overall scrolling
+            overflow: "hidden",
           }}
         >
           {/* Left Navigation - Drawer on small screens, permanent sidebar on larger screens */}
@@ -88,19 +88,28 @@ function App() {
               flexGrow: 1,
               height: "100%",
               backgroundColor: CHAT_BODY_BACKGROUND,
-              padding: {
-                xs: "0.5rem 0.5rem 0", // Remove bottom padding
-                sm: "0.75rem 1rem 0", // Reduce top padding
-                md: "1rem 5% 0", // Reduce top padding
-                lg: "1rem 10% 0", // Reduce top padding
-              },
               display: "flex",
               flexDirection: "column",
-              overflow: "hidden", // Prevent scrolling at this level
+              overflow: "hidden",
               position: "relative",
             }}
           >
-            <ChatHeader language={language} />
+            {/* Chat Header */}
+            <Box
+              sx={{
+                flexShrink: 0,
+                padding: {
+                  xs: "0.5rem 1rem",
+                  sm: "0.75rem 2rem",
+                  md: "1rem 3rem",
+                  lg: "1rem 4rem",
+                },
+              }}
+            >
+              <ChatHeader language={language} />
+            </Box>
+
+            {/* Chat Body */}
             <Box
               sx={{
                 flex: "1 1 auto",
@@ -108,7 +117,13 @@ function App() {
                 flexDirection: "column",
                 overflow: "hidden",
                 position: "relative",
-                minHeight: 0, // Allow flex items to shrink below content size
+                minHeight: 0,
+                padding: {
+                  xs: "0 1rem",
+                  sm: "0 2rem",
+                  md: "0 3rem",
+                  lg: "0 4rem",
+                },
               }}
             >
               <ChatBody language={language} />

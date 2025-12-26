@@ -1,44 +1,34 @@
 import Typography from "@mui/material/Typography"
 import { getCurrentText, HEADER_TEXT_GRADIENT } from "../utilities/constants"
-import { Box, Container, useMediaQuery } from "@mui/material"
+import { Box, useMediaQuery } from "@mui/material"
 
 function ChatHeader({ language = 'en' }) {
   const TEXT = getCurrentText(language)
   const isSmallScreen = useMediaQuery("(max-width:600px)")
 
   return (
-    <Container
+    <Box
       sx={{
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        height: "auto",
-        padding: "0 !important",
-        marginTop: "0.5rem",
+        width: "100%",
         marginBottom: isSmallScreen ? "1rem" : "1.5rem",
       }}
     >
-      <Box
+      <Typography
+        variant={isSmallScreen ? "h5" : "h4"}
         sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: isSmallScreen ? 1 : 2,
+          color: HEADER_TEXT_GRADIENT,
+          fontWeight: "bold",
+          fontSize: isSmallScreen ? "1.5rem" : "2.25rem",
+          textAlign: "center",
+          lineHeight: 1.2,
         }}
       >
-        <Typography
-          variant={isSmallScreen ? "h5" : "h4"}
-          className="chatHeaderText"
-          sx={{
-            color: HEADER_TEXT_GRADIENT,
-            fontWeight: "bold",
-            fontSize: isSmallScreen ? "1.25rem" : "2rem",
-            textAlign: "center",
-          }}
-        >
-          {TEXT.CHAT_HEADER_TITLE}
-        </Typography>
-      </Box>
-    </Container>
+        {TEXT.CHAT_HEADER_TITLE}
+      </Typography>
+    </Box>
   )
 }
 
