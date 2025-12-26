@@ -109,7 +109,7 @@ export class BedrockChatbotStack extends cdk.Stack {
                 `arn:aws:bedrock:${this.region}::foundation-model/${embeddingModelId}`,
               ],
             }),
-            // Bedrock Data Automation access for advanced PDF parsing - COMPREHENSIVE
+            // Bedrock Data Automation access for advanced PDF parsing - REGION AGNOSTIC
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
               actions: [
@@ -118,13 +118,13 @@ export class BedrockChatbotStack extends cdk.Stack {
                 'bedrock:ListDataAutomationJobs',
               ],
               resources: [
-                // Dynamic resource patterns to handle all data automation resources
-                `arn:aws:bedrock:${this.region}:${this.account}:data-automation-profile/*`,
-                `arn:aws:bedrock:${this.region}:aws:data-automation-profile/*`,
-                `arn:aws:bedrock:${this.region}:${this.account}:data-automation-project/*`,
-                `arn:aws:bedrock:${this.region}:aws:data-automation-project/*`,
-                // Wildcard for any data automation resources
-                `arn:aws:bedrock:${this.region}:*:data-automation-*/*`,
+                // Region-agnostic patterns to handle all regions
+                `arn:aws:bedrock:*:${this.account}:data-automation-profile/*`,
+                `arn:aws:bedrock:*:aws:data-automation-profile/*`,
+                `arn:aws:bedrock:*:${this.account}:data-automation-project/*`,
+                `arn:aws:bedrock:*:aws:data-automation-project/*`,
+                // Wildcard for any data automation resources in any region
+                `arn:aws:bedrock:*:*:data-automation-*/*`,
               ],
             }),
             // S3 access for documents
