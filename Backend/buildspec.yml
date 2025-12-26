@@ -336,7 +336,7 @@ phases:
             echo "🔧 Updating trust relationship..."
             
             # Create correct trust policy
-            cat > /tmp/kb-trust-policy.json << EOF
+            cat > /tmp/kb-trust-policy.json << 'EOF'
 {
   "Version": "2012-10-17",
   "Statement": [
