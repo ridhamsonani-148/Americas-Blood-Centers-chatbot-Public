@@ -217,6 +217,9 @@ export class BedrockChatbotStack extends cdk.Stack {
               resources: [
                 `arn:aws:bedrock:${this.region}::foundation-model/${modelId}`,
                 `arn:aws:bedrock:${this.region}::foundation-model/${embeddingModelId}`,
+                // Support for inference profiles (cross-region models)
+                `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/*`,
+                `arn:aws:bedrock:*:${this.account}:inference-profile/*`,
               ],
             }),
             // Bedrock Knowledge Base access
