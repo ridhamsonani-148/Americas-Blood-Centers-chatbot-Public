@@ -95,7 +95,7 @@ export class BedrockChatbotStack extends cdk.Stack {
     const knowledgeBaseRole = new iam.Role(this, 'KnowledgeBaseRole', {
       assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
       description: 'Role for Bedrock Knowledge Base to access S3 and OpenSearch - Updated for Data Automation',
-      roleName: `${projectName}-kb-role-${this.account}-${this.region}`, // Force new role creation
+      // Remove explicit roleName to avoid conflicts and length issues
       inlinePolicies: {
         BedrockKnowledgeBasePolicy: new iam.PolicyDocument({
           statements: [
@@ -109,7 +109,7 @@ export class BedrockChatbotStack extends cdk.Stack {
                 `arn:aws:bedrock:${this.region}::foundation-model/${embeddingModelId}`,
               ],
             }),
-            // Bedrock Data Automation access for advanced PDF parsing - FIXED
+            // Bedrock Data Automation access for advanced PDF parsing - COMPREHENSIVE
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
               actions: [
@@ -118,8 +118,13 @@ export class BedrockChatbotStack extends cdk.Stack {
                 'bedrock:ListDataAutomationJobs',
               ],
               resources: [
+                // Dynamic resource patterns to handle all data automation resources
                 `arn:aws:bedrock:${this.region}:${this.account}:data-automation-profile/*`,
-                `arn:aws:bedrock:${this.region}:aws:data-automation-profile/us.data-automation-v1`,
+                `arn:aws:bedrock:${this.region}:aws:data-automation-profile/*`,
+                `arn:aws:bedrock:${this.region}:${this.account}:data-automation-project/*`,
+                `arn:aws:bedrock:${this.region}:aws:data-automation-project/*`,
+                // Wildcard for any data automation resources
+                `arn:aws:bedrock:${this.region}:*:data-automation-*/*`,
               ],
             }),
             // S3 access for documents
@@ -163,6 +168,20 @@ export class BedrockChatbotStack extends cdk.Stack {
         }),
       },
     });
+
+    // Add explicit trust policy to ensure Bedrock can assume the role
+    knowledgeBaseRole.assumeRolePolicy?.addStatements(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        principals: [new iam.ServicePrincipal('bedrock.amazonaws.com')],
+        actions: ['sts:AssumeRole'],
+        conditions: {
+          StringEquals: {
+            'aws:SourceAccount': this.account,
+          },
+        },
+      })
+    );
 
     // Grant Bedrock service access to S3 bucket
     documentsBucket.addToResourcePolicy(

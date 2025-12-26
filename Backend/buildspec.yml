@@ -325,6 +325,50 @@ phases:
           echo "✓ Knowledge Base role ($KB_ROLE_NAME) should have bedrock:InvokeDataAutomationAsync permission"
           echo "✓ This permission is configured in the CDK stack for resource: arn:aws:bedrock:${CDK_DEFAULT_REGION}:aws:data-automation-profile/us.data-automation-v1"
           
+          # Verify the trust relationship is correct
+          echo "🔍 Verifying Knowledge Base role trust relationship..."
+          TRUST_POLICY=$(aws iam get-role --role-name "$KB_ROLE_NAME" --query 'Role.AssumeRolePolicyDocument' --output json 2>/dev/null || echo "{}")
+          
+          if echo "$TRUST_POLICY" | grep -q "bedrock.amazonaws.com"; then
+            echo "✓ Trust relationship allows bedrock.amazonaws.com"
+          else
+            echo "⚠ Trust relationship might need updating"
+            echo "🔧 Updating trust relationship..."
+            
+            # Create correct trust policy
+            cat > /tmp/kb-trust-policy.json << EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "bedrock.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceAccount": "${AWS_ACCOUNT_ID}"
+        }
+      }
+    }
+  ]
+}
+EOF
+            
+            # Update trust policy
+            aws iam update-assume-role-policy \
+              --role-name "$KB_ROLE_NAME" \
+              --policy-document file:///tmp/kb-trust-policy.json && echo "✓ Trust relationship updated"
+            
+            # Clean up
+            rm -f /tmp/kb-trust-policy.json
+            
+            # Wait for propagation
+            echo "⏳ Waiting for trust policy propagation..."
+            sleep 10
+          fi
+          
           # Wait for policy update to propagate
           echo "Waiting for policy update to propagate..."
           sleep 10
