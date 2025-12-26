@@ -335,26 +335,24 @@ phases:
             echo "⚠ Trust relationship might need updating"
             echo "🔧 Updating trust relationship..."
             
-            # Create correct trust policy
-            cat > /tmp/kb-trust-policy.json << 'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "bedrock.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole",
-      "Condition": {
-        "StringEquals": {
-          "aws:SourceAccount": "${AWS_ACCOUNT_ID}"
-        }
-      }
-    }
-  ]
-}
-EOF
+            # Create correct trust policy using echo instead of heredoc
+            echo '{
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "Service": "bedrock.amazonaws.com"
+                  },
+                  "Action": "sts:AssumeRole",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:SourceAccount": "'${AWS_ACCOUNT_ID}'"
+                    }
+                  }
+                }
+              ]
+            }' > /tmp/kb-trust-policy.json
             
             # Update trust policy
             aws iam update-assume-role-policy \
