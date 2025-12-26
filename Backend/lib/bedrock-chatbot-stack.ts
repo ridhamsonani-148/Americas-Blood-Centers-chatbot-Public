@@ -94,7 +94,8 @@ export class BedrockChatbotStack extends cdk.Stack {
     // ===== Bedrock Knowledge Base Service Role =====
     const knowledgeBaseRole = new iam.Role(this, 'KnowledgeBaseRole', {
       assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
-      description: 'Role for Bedrock Knowledge Base to access S3 and OpenSearch',
+      description: 'Role for Bedrock Knowledge Base to access S3 and OpenSearch - Updated for Data Automation',
+      roleName: `${projectName}-kb-role-${this.account}-${this.region}`, // Force new role creation
       inlinePolicies: {
         BedrockKnowledgeBasePolicy: new iam.PolicyDocument({
           statements: [
@@ -108,7 +109,7 @@ export class BedrockChatbotStack extends cdk.Stack {
                 `arn:aws:bedrock:${this.region}::foundation-model/${embeddingModelId}`,
               ],
             }),
-            // Bedrock Data Automation access for advanced PDF parsing
+            // Bedrock Data Automation access for advanced PDF parsing - FIXED
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
               actions: [
