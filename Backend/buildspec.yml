@@ -1030,7 +1030,39 @@ phases:
                   else
                     echo "⚠ Deployment trigger may have failed"
                     echo "Response: $DEPLOY_RESPONSE"
-                    FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (check deployment status)"
+                    
+                    # Try direct Amplify deployment as fallback
+                    echo "🔄 Attempting direct Amplify deployment as fallback..."
+                    echo "🔍 Debug: Using CodeBuild's broader permissions for direct deployment"
+                    
+                    set +e  # Temporarily disable exit on error
+                    DIRECT_DEPLOY_RESULT=$(aws amplify start-deployment \
+                      --app-id "$AMPLIFY_APP_ID" \
+                      --branch-name "main" \
+                      --source-url "s3://$BUILD_BUCKET/$BUILD_KEY" \
+                      --region "$CDK_DEFAULT_REGION" 2>&1)
+                    DIRECT_DEPLOY_EXIT_CODE=$?
+                    set -e  # Re-enable exit on error
+                    
+                    echo "🔍 Debug: Direct deployment exit code: $DIRECT_DEPLOY_EXIT_CODE"
+                    echo "🔍 Debug: Direct deployment result: $DIRECT_DEPLOY_RESULT"
+                    
+                    if [ $DIRECT_DEPLOY_EXIT_CODE -eq 0 ]; then
+                      DIRECT_JOB_ID=$(echo "$DIRECT_DEPLOY_RESULT" | jq -r '.jobSummary.jobId // empty')
+                      if [ -n "$DIRECT_JOB_ID" ] && [ "$DIRECT_JOB_ID" != "empty" ]; then
+                        echo "✓ Direct Amplify deployment started successfully: $DIRECT_JOB_ID"
+                        echo "📱 Frontend will be available at: https://main.$AMPLIFY_APP_ID.amplifyapp.com"
+                        echo "⏱️ Deployment typically completes in 2-3 minutes"
+                        FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com"
+                      else
+                        echo "⚠ Direct deployment succeeded but couldn't extract job ID"
+                        FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (check Amplify console)"
+                      fi
+                    else
+                      echo "✗ Direct deployment also failed: $DIRECT_DEPLOY_RESULT"
+                      echo "This suggests a broader issue with Amplify deployment"
+                      FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (deployment failed)"
+                    fi
                   fi
                 else
                   echo "✗ No response file created"

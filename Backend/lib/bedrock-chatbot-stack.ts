@@ -60,6 +60,37 @@ export class BedrockChatbotStack extends cdk.Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
     });
 
+    // Grant Amplify service access to builds bucket (critical for deployment)
+    buildsBucket.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowAmplifyServiceAccess',
+        effect: iam.Effect.ALLOW,
+        principals: [new iam.ServicePrincipal('amplify.amazonaws.com')],
+        actions: [
+          's3:GetObject',
+          's3:GetObjectAcl',
+          's3:GetObjectVersion',
+          's3:GetObjectVersionAcl',
+          's3:PutObjectAcl',
+          's3:PutObjectVersionAcl',
+          's3:ListBucket',
+          's3:GetBucketAcl',
+          's3:GetBucketLocation',
+          's3:GetBucketVersioning',
+          's3:GetBucketPolicy',
+          's3:GetBucketPolicyStatus',
+          's3:GetBucketPublicAccessBlock',
+          's3:GetEncryptionConfiguration',
+        ],
+        resources: [buildsBucket.bucketArn, `${buildsBucket.bucketArn}/*`],
+        conditions: {
+          StringEquals: {
+            'aws:SourceAccount': this.account,
+          },
+        },
+      })
+    );
+
     // ===== Bedrock Knowledge Base Service Role =====
     const knowledgeBaseRole = new iam.Role(this, 'KnowledgeBaseRole', {
       assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
@@ -334,6 +365,11 @@ export class BedrockChatbotStack extends cdk.Stack {
                 'amplify:CreateDeployment',
                 'amplify:UpdateApp',
                 'amplify:UpdateBranch',
+                // Additional permissions that might be needed for deployment
+                'amplify:StartJob',
+                'amplify:StopJob',
+                'amplify:GetJob',
+                'amplify:ListJobs',
               ],
               resources: [
                 '*', // Amplify resources are dynamic, so we need wildcard
@@ -344,8 +380,21 @@ export class BedrockChatbotStack extends cdk.Stack {
               effect: iam.Effect.ALLOW,
               actions: [
                 's3:GetObject',
+                's3:GetObjectVersion',
+                's3:GetObjectAcl',
+                's3:GetObjectVersionAcl',
+                's3:PutObjectAcl',
+                's3:PutObjectVersionAcl',
                 's3:ListBucket',
+                's3:GetBucketAcl',
                 's3:GetBucketLocation',
+                's3:GetBucketVersioning',
+                's3:PutBucketAcl',
+                's3:ListBucketVersions',
+                's3:GetBucketPolicy',
+                's3:GetBucketPolicyStatus',
+                's3:GetBucketPublicAccessBlock',
+                's3:GetEncryptionConfiguration',
               ],
               resources: [
                 buildsBucket.bucketArn,
@@ -357,10 +406,27 @@ export class BedrockChatbotStack extends cdk.Stack {
               effect: iam.Effect.ALLOW,
               actions: [
                 'iam:PassRole',
+                'iam:GetRole',
+                'iam:ListRoles',
               ],
               resources: [
                 `arn:aws:iam::${this.account}:role/amplifyconsole-*`,
                 `arn:aws:iam::${this.account}:role/amplify-*`,
+                `arn:aws:iam::${this.account}:role/service-role/amplifyconsole-*`,
+              ],
+            }),
+            // CloudWatch Logs permissions (Amplify might need this)
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'logs:CreateLogGroup',
+                'logs:CreateLogStream',
+                'logs:PutLogEvents',
+                'logs:DescribeLogGroups',
+                'logs:DescribeLogStreams',
+              ],
+              resources: [
+                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/amplify/*`,
               ],
             }),
           ],
