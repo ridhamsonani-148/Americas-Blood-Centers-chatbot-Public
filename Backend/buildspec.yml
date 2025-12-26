@@ -1042,11 +1042,6 @@ phases:
                 echo "Exit code: $DEPLOY_EXIT_CODE"
                 FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (Lambda invocation failed)"
               fi
-              else
-                echo "✗ Failed to trigger deployment"
-                echo "Error: $DEPLOY_RESULT"
-                FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (manual deployment required)"
-              fi
             else
               echo "⚠ AmplifyDeployer Lambda not found, falling back to manual deployment"
               echo "📋 Manual deployment options:"
