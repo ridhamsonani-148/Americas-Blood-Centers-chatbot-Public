@@ -331,8 +331,13 @@ export class BedrockChatbotStack extends cdk.Stack {
                 'amplify:GetBranch',
                 'amplify:ListApps',
                 'amplify:ListBranches',
+                'amplify:CreateDeployment',
+                'amplify:UpdateApp',
+                'amplify:UpdateBranch',
               ],
-              resources: ['*'],
+              resources: [
+                '*', // Amplify resources are dynamic, so we need wildcard
+              ],
             }),
             // S3 access for build artifacts
             new iam.PolicyStatement({
@@ -340,10 +345,22 @@ export class BedrockChatbotStack extends cdk.Stack {
               actions: [
                 's3:GetObject',
                 's3:ListBucket',
+                's3:GetBucketLocation',
               ],
               resources: [
                 buildsBucket.bucketArn,
                 `${buildsBucket.bucketArn}/*`,
+              ],
+            }),
+            // Additional IAM permissions that might be needed
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'iam:PassRole',
+              ],
+              resources: [
+                `arn:aws:iam::${this.account}:role/amplifyconsole-*`,
+                `arn:aws:iam::${this.account}:role/amplify-*`,
               ],
             }),
           ],

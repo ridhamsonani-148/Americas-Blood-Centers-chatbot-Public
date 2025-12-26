@@ -73,6 +73,15 @@ def lambda_handler(event, context):
         logger.info(f"Starting Amplify deployment for app {amplify_app_id}, branch {amplify_branch_name}")
         logger.info(f"Source URL: {source_url}")
         
+        # Debug: Test Amplify permissions first
+        try:
+            logger.info("Testing Amplify permissions by getting app info...")
+            app_info = amplify.get_app(appId=amplify_app_id)
+            logger.info(f"Successfully retrieved app info: {app_info['app']['name']}")
+        except Exception as perm_error:
+            logger.error(f"Permission test failed: {str(perm_error)}")
+            logger.error(f"Error type: {type(perm_error).__name__}")
+        
         # Start Amplify deployment
         response = amplify.start_deployment(
             appId=amplify_app_id,
