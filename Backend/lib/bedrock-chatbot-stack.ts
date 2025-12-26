@@ -364,6 +364,9 @@ export class BedrockChatbotStack extends cdk.Stack {
       },
       description: 'Automated Amplify deployment handler',
     });
+
+    // Add explicit dependency to ensure Lambda is fully ready
+    amplifyDeployerLambda.node.addDependency(buildsBucket);
     const dataIngestionLambda = new lambda.Function(this, 'DataIngestionFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'data_ingestion.lambda_handler',

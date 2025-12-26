@@ -937,11 +937,56 @@ phases:
             if [ -n "$AMPLIFY_DEPLOYER_FUNCTION_NAME" ] && [ "$AMPLIFY_DEPLOYER_FUNCTION_NAME" != "None" ]; then
               echo "✓ Found AmplifyDeployer Lambda: $AMPLIFY_DEPLOYER_FUNCTION_NAME"
               
+              # Wait for Lambda function to be ready (it might still be updating)
+              echo "Waiting for Lambda function to be ready..."
+              LAMBDA_READY=false
+              WAIT_COUNT=0
+              MAX_WAIT=60  # Increased to 60 seconds for large Lambda packages
+              
+              while [ "$LAMBDA_READY" = false ] && [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+                LAMBDA_STATE=$(aws lambda get-function \
+                  --function-name "$AMPLIFY_DEPLOYER_FUNCTION_NAME" \
+                  --region "$CDK_DEFAULT_REGION" \
+                  --query 'Configuration.LastUpdateStatus' \
+                  --output text 2>/dev/null || echo "ERROR")
+                
+                echo "🔍 Debug: Lambda state: $LAMBDA_STATE (waited ${WAIT_COUNT}s)"
+                
+                if [ "$LAMBDA_STATE" = "Successful" ]; then
+                  LAMBDA_READY=true
+                  echo "✓ Lambda function is ready"
+                elif [ "$LAMBDA_STATE" = "Failed" ]; then
+                  echo "✗ Lambda function deployment failed"
+                  # Get more details about the failure
+                  aws lambda get-function \
+                    --function-name "$AMPLIFY_DEPLOYER_FUNCTION_NAME" \
+                    --region "$CDK_DEFAULT_REGION" \
+                    --query 'Configuration.LastUpdateStatusReason' \
+                    --output text
+                  break
+                else
+                  echo "⏳ Lambda function status: $LAMBDA_STATE (waiting ${WAIT_COUNT}s)"
+                  sleep 3
+                  WAIT_COUNT=$((WAIT_COUNT + 3))
+                fi
+              done
+              
+              if [ "$LAMBDA_READY" = false ]; then
+                echo "⚠ Lambda function not ready after ${MAX_WAIT}s"
+                echo "Current state: $LAMBDA_STATE"
+                echo "Proceeding anyway, but deployment may fail..."
+              fi
+              
               # Update AmplifyDeployer Lambda with Amplify app details (Catholic Charity style)
+              echo "Updating Lambda environment variables..."
               aws lambda update-function-configuration \
                 --function-name "$AMPLIFY_DEPLOYER_FUNCTION_NAME" \
                 --environment "Variables={AMPLIFY_APP_ID=$AMPLIFY_APP_ID,AMPLIFY_BRANCH_NAME=main}" \
                 --region "$CDK_DEFAULT_REGION"
+              
+              # Wait a moment for the environment update to propagate
+              echo "Waiting for environment update to propagate..."
+              sleep 5
               
               echo "✓ AmplifyDeployer configured with app ID: $AMPLIFY_APP_ID"
               
@@ -953,30 +998,50 @@ phases:
               
               echo "Invoking AmplifyDeployer Lambda with payload: $DEPLOY_PAYLOAD"
               
+              # Use --cli-binary-format raw-in-base64-out for proper JSON handling
+              set +e  # Temporarily disable exit on error
               DEPLOY_RESULT=$(aws lambda invoke \
                 --function-name "$AMPLIFY_DEPLOYER_FUNCTION_NAME" \
                 --payload "$DEPLOY_PAYLOAD" \
+                --cli-binary-format raw-in-base64-out \
                 --region "$CDK_DEFAULT_REGION" \
                 /tmp/deploy_response.json 2>&1)
-              
               DEPLOY_EXIT_CODE=$?
+              set -e  # Re-enable exit on error
+              
               echo "🔍 Debug: Lambda invocation exit code: $DEPLOY_EXIT_CODE"
               echo "🔍 Debug: Lambda invocation result: $DEPLOY_RESULT"
               
               if [ $DEPLOY_EXIT_CODE -eq 0 ]; then
-                DEPLOY_RESPONSE=$(cat /tmp/deploy_response.json)
-                echo "🔍 Debug: Lambda response: $DEPLOY_RESPONSE"
-                
-                if echo "$DEPLOY_RESPONSE" | grep -q '"statusCode": 200'; then
-                  echo "✓ Amplify deployment triggered successfully"
-                  echo "📱 Frontend will be available at: https://main.$AMPLIFY_APP_ID.amplifyapp.com"
-                  echo "⏱️ Deployment typically completes in 2-3 minutes"
-                  FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com"
+                if [ -f "/tmp/deploy_response.json" ]; then
+                  DEPLOY_RESPONSE=$(cat /tmp/deploy_response.json)
+                  echo "🔍 Debug: Lambda response: $DEPLOY_RESPONSE"
+                  
+                  # Check if the response contains an error
+                  if echo "$DEPLOY_RESPONSE" | grep -q '"errorMessage"'; then
+                    echo "✗ Lambda execution failed"
+                    echo "Error: $DEPLOY_RESPONSE"
+                    FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (Lambda execution failed)"
+                  elif echo "$DEPLOY_RESPONSE" | grep -q '"statusCode": 200'; then
+                    echo "✓ Amplify deployment triggered successfully"
+                    echo "📱 Frontend will be available at: https://main.$AMPLIFY_APP_ID.amplifyapp.com"
+                    echo "⏱️ Deployment typically completes in 2-3 minutes"
+                    FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com"
+                  else
+                    echo "⚠ Deployment trigger may have failed"
+                    echo "Response: $DEPLOY_RESPONSE"
+                    FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (check deployment status)"
+                  fi
                 else
-                  echo "⚠ Deployment trigger may have failed"
-                  echo "Response: $DEPLOY_RESPONSE"
-                  FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (check deployment status)"
+                  echo "✗ No response file created"
+                  FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (no response file)"
                 fi
+              else
+                echo "✗ Failed to invoke Lambda function"
+                echo "Error: $DEPLOY_RESULT"
+                echo "Exit code: $DEPLOY_EXIT_CODE"
+                FRONTEND_URL="https://main.$AMPLIFY_APP_ID.amplifyapp.com (Lambda invocation failed)"
+              fi
               else
                 echo "✗ Failed to trigger deployment"
                 echo "Error: $DEPLOY_RESULT"
