@@ -4,25 +4,27 @@ Lambda function for handling chat requests using Bedrock Knowledge Base and Foun
 """
 
 import json
-import boto3
 import logging
 import os
-from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, List
+import boto3
+from botocore.exceptions import ClientError
+from datetime import datetime, timedelta
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Initialize AWS clients
-bedrock_agent_runtime = boto3.client('bedrock-agent-runtime')
 bedrock_runtime = boto3.client('bedrock-runtime')
+bedrock_agent_runtime = boto3.client('bedrock-agent-runtime')
+s3_client = boto3.client('s3')
 
 # Environment variables
 KNOWLEDGE_BASE_ID = os.environ.get('KNOWLEDGE_BASE_ID')
 MODEL_ID = os.environ.get('MODEL_ID', 'anthropic.claude-3-haiku-20240307-v1:0')
 MAX_TOKENS = int(os.environ.get('MAX_TOKENS', '1000'))
-TEMPERATURE = float(os.environ.get('TEMPERATURE', '0.1'))
+TEMPERATURE = float(os.environ.get('TEMPERATURE', '0.0'))  # Minimum temperature for maximum consistency
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -100,13 +102,45 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         logger.info(f"Processing chat request: {user_message[:100]}... (language: {language})")
         
         # Step 1: Retrieve relevant context from Knowledge Base
-        context_results = retrieve_context(user_message)
+        logger.info(f"Retrieving context for query: {user_message}...")
+        
+        retrieve_response = bedrock_agent_runtime.retrieve(
+            knowledgeBaseId=KNOWLEDGE_BASE_ID,
+            retrievalQuery={'text': user_message},
+            retrievalConfiguration={
+                'vectorSearchConfiguration': {
+                    'numberOfResults': 50,  # Increased to 50 for more comprehensive results
+                    'overrideSearchType': 'SEMANTIC'  # Use semantic search only
+                }
+            }
+        )
+        
+        context_results = retrieve_response.get('retrievalResults', [])
+        logger.info(f"Retrieved {len(context_results)} context results (max 50)")
+        
+        # Debug: Log the structure of context results
+        if context_results:
+            logger.info(f"Sample context result structure: {json.dumps(context_results[0], indent=2, default=str)}")
+        
+        # Extract sources from context results
+        sources = extract_sources(context_results)
+        logger.info(f"Extracted {len(sources)} sources from context results")
+        
+        # Debug: Log each context result structure
+        for i, result in enumerate(context_results[:5]):  # Log first 5 results
+            logger.info(f"Context result {i+1}: location={result.get('location', {})}")
+            logger.info(f"Context result {i+1}: metadata keys={list(result.get('metadata', {}).keys())}")
+            if result.get('metadata', {}).get('x-amz-bedrock-kb-source-uri'):
+                logger.info(f"Context result {i+1}: source-uri={result['metadata']['x-amz-bedrock-kb-source-uri']}")
+        
+        if len(sources) == 0 and len(context_results) > 0:
+            logger.warning(f"No sources extracted despite having {len(context_results)} context results!")
+            logger.warning(f"Sample result structure: {json.dumps(context_results[0], indent=2, default=str)}")
         
         # Step 2: Generate response using Bedrock LLM
         response_data = generate_response(user_message, context_results, language)
         
         # Step 3: Add blood center link if asking about donation locations
-        sources = extract_sources(context_results)
         sources = add_blood_center_link_if_needed(user_message, sources)
         
         # Prepare final response
@@ -144,32 +178,34 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             })
         }
 
-def retrieve_context(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+def generate_presigned_url(s3_uri: str) -> str:
     """
-    Retrieve relevant context from Bedrock Knowledge Base
+    Generate a presigned URL for S3 objects to make them accessible to users
     """
     try:
-        logger.info(f"Retrieving context for query: {query[:100]}...")
+        # Parse S3 URI (s3://bucket-name/key)
+        if not s3_uri.startswith('s3://'):
+            return s3_uri  # Return as-is if not an S3 URI
         
-        response = bedrock_agent_runtime.retrieve(
-            knowledgeBaseId=KNOWLEDGE_BASE_ID,
-            retrievalQuery={'text': query},
-            retrievalConfiguration={
-                'vectorSearchConfiguration': {
-                    'numberOfResults': max_results,
-                    'overrideSearchType': 'HYBRID'  # Use both semantic and keyword search
-                }
-            }
+        # Remove s3:// prefix and split bucket and key
+        s3_path = s3_uri[5:]  # Remove 's3://'
+        bucket_name = s3_path.split('/')[0]
+        object_key = '/'.join(s3_path.split('/')[1:])
+        
+        # Generate presigned URL (valid for 1 hour)
+        presigned_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket_name, 'Key': object_key},
+            ExpiresIn=3600  # 1 hour
         )
         
-        results = response.get('retrievalResults', [])
-        logger.info(f"Retrieved {len(results)} context results")
-        
-        return results
+        logger.info(f"Generated presigned URL for {object_key}")
+        return presigned_url
         
     except Exception as e:
-        logger.error(f"Error retrieving context: {str(e)}")
-        return []
+        logger.error(f"Error generating presigned URL for {s3_uri}: {str(e)}")
+        return s3_uri  # Return original URI if generation fails
+
 
 def generate_response(user_message: str, context_results: List[Dict[str, Any]], language: str) -> Dict[str, Any]:
     """
@@ -290,7 +326,7 @@ Answer:"""
 
 def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Extract source information from context results
+    Extract source information from context results with enhanced URL handling
     """
     sources = []
     
@@ -298,30 +334,74 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
         location = result.get('location', {})
         metadata = result.get('metadata', {})
         
-        # Extract source URL and title
-        source_url = location.get('s3Location', {}).get('uri', '')
-        source_title = metadata.get('title', metadata.get('source', 'Document'))
+        # Extract source information from different possible locations
+        source_url = None
+        source_title = None
         
+        # Try different ways to get the source URL
+        if 's3Location' in location:
+            # S3 document source
+            s3_uri = location['s3Location'].get('uri', '')
+            if s3_uri:
+                source_url = s3_uri
+                # Extract filename for title
+                if 'pdfs/' in s3_uri:
+                    filename = s3_uri.split('/')[-1]
+                    source_title = filename.replace('.pdf', '').replace('-', ' ').replace('_', ' ').title()
+                else:
+                    filename = s3_uri.split('/')[-1] if '/' in s3_uri else s3_uri
+                    source_title = filename.replace('.pdf', '').replace('-', ' ').replace('_', ' ').title()
+        
+        elif 'webLocation' in location:
+            # Web crawler source
+            source_url = location['webLocation'].get('url', '')
+            source_title = metadata.get('title', metadata.get('source', 'Web Page'))
+        
+        # Fallback: check metadata for source information
+        if not source_url:
+            # Try various metadata fields
+            source_url = (metadata.get('x-amz-bedrock-kb-source-uri') or 
+                         metadata.get('source') or 
+                         metadata.get('uri') or 
+                         metadata.get('url', ''))
+            
+            if source_url and 's3://' in source_url:
+                filename = source_url.split('/')[-1] if '/' in source_url else source_url
+                source_title = filename.replace('.pdf', '').replace('-', ' ').replace('_', ' ').title()
+            else:
+                source_title = metadata.get('title', metadata.get('source', 'Document'))
+        
+        # Add source if we found a URL
         if source_url:
-            # Determine if it's a document or web URL
-            is_document = any(ext in source_url.lower() for ext in ['.pdf', '.docx', '.txt'])
+            # Determine source type
+            is_document = any(ext in source_url.lower() for ext in ['.pdf', '.docx', '.txt']) or 's3://' in source_url
+            
+            # Generate presigned URL for S3 documents
+            accessible_url = source_url
+            if source_url.startswith('s3://'):
+                accessible_url = generate_presigned_url(source_url)
+                logger.info(f"Converted S3 URI to presigned URL: {source_url} -> {accessible_url[:100]}...")
             
             sources.append({
-                "title": source_title,
-                "url": source_url,
+                "title": source_title or f"Source {len(sources) + 1}",
+                "url": accessible_url,  # Use presigned URL for accessibility
+                "uri": source_url,  # Keep original URI for reference
                 "type": "DOCUMENT" if is_document else "WEB",
                 "score": result.get('score', 0)
             })
+            
+            logger.info(f"Extracted source: {source_title} - {accessible_url[:100]}...")
     
     # Remove duplicates and sort by score
     unique_sources = []
     seen_urls = set()
     
     for source in sorted(sources, key=lambda x: x.get('score', 0), reverse=True):
-        if source['url'] not in seen_urls:
+        if source['uri'] not in seen_urls:  # Use original URI for deduplication
             unique_sources.append(source)
-            seen_urls.add(source['url'])
+            seen_urls.add(source['uri'])
     
+    logger.info(f"Final sources count: {len(unique_sources)}")
     return unique_sources
 
 def add_blood_center_link_if_needed(user_message: str, sources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

@@ -279,6 +279,18 @@ export class BedrockChatbotStack extends cdk.Stack {
                 `arn:aws:bedrock:${this.region}:${this.account}:data-source/*`,
               ],
             }),
+            // Additional Bedrock permissions for ingestion jobs
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'bedrock:StartIngestionJob',
+                'bedrock:GetIngestionJob',
+                'bedrock:ListIngestionJobs',
+              ],
+              resources: [
+                `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`,
+              ],
+            }),
             // S3 access for document management
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
@@ -322,7 +334,7 @@ export class BedrockChatbotStack extends cdk.Stack {
         MODEL_ID: modelId,
         EMBEDDING_MODEL_ID: embeddingModelId,
         MAX_TOKENS: '1000',
-        TEMPERATURE: '0.1',
+        TEMPERATURE: '0.0',
         DOCUMENTS_BUCKET: documentsBucket.bucketName,
       },
       description: 'America\'s Blood Centers Bedrock Chat Handler',

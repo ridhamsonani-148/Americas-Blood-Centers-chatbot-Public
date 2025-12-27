@@ -624,10 +624,11 @@ phases:
               }' \
               --vector-ingestion-configuration '{
                 "chunkingConfiguration": {
-                  "chunkingStrategy": "FIXED_SIZE",
-                  "fixedSizeChunkingConfiguration": {
-                    "maxTokens": 300,
-                    "overlapPercentage": 20
+                  "chunkingStrategy": "SEMANTIC",
+                  "semanticChunkingConfiguration": {
+                    "maxTokens": 1500,
+                    "bufferSize": 0,
+                    "breakpointPercentileThreshold": 95
                   }
                 },
                 "parsingConfiguration": {
@@ -714,29 +715,25 @@ phases:
                   "crawlerConfiguration": {
                     "crawlerLimits": {
                       "rateLimit": 300,
-                      "maxPages": 50
+                      "maxPages": 1500
                     },
                     "exclusionFilters": [
                       ".*/wp-admin/.*", 
                       ".*/login/.*", 
                       ".*/admin/.*",
-                      ".*/wp-content/uploads/.*"
                     ],
                     "inclusionFilters": [
-                      ".*/for-donors/.*", 
-                      ".*/news/.*", 
-                      ".*/newsroom/.*",
-                      ".*/one-pagers-faqs/.*"
                     ]
                   }
                 }
               }' \
               --vector-ingestion-configuration '{
                 "chunkingConfiguration": {
-                  "chunkingStrategy": "FIXED_SIZE",
-                  "fixedSizeChunkingConfiguration": {
-                    "maxTokens": 300,
-                    "overlapPercentage": 20
+                  "chunkingStrategy": "SEMANTIC",
+                  "semanticChunkingConfiguration": {
+                    "maxTokens": 1500,
+                    "bufferSize": 0,
+                    "breakpointPercentileThreshold": 95
                   }
                 },
                 "parsingConfiguration": {

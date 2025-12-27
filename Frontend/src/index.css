@@ -3,6 +3,7 @@ body {
   font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: #F5F8FA;
 }
 
 code {
@@ -24,12 +25,22 @@ code {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: #CC2345;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: #08325C;
+}
+
+/* Remove default button focus outline */
+button:focus {
+  outline: none;
+}
+
+/* Smooth transitions for interactive elements */
+* {
+  transition: all 0.2s ease;
 }
 
 /* Message styling */

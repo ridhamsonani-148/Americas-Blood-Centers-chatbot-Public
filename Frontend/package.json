@@ -1,23 +1,19 @@
 {
-  "name": "americas-blood-centers-bedrock-frontend",
+  "name": "americas-blood-centers-frontend",
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@emotion/react": "^11.11.4",
-    "@emotion/styled": "^11.11.5",
-    "@mui/icons-material": "^5.15.20",
-    "@mui/material": "^5.15.18",
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.14.19",
+    "@mui/material": "^5.14.20",
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4"
-  },
-  "devDependencies": {
-    "@babel/plugin-transform-private-property-in-object": "^7.24.7",
-    "@babel/plugin-proposal-private-property-in-object": "^7.21.11"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -42,26 +38,5 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  },
-  "overrides": {
-    "path-to-regexp": "^6.3.0",
-    "cross-spawn": "^7.0.6",
-    "http-proxy-middleware": "^2.0.7",
-    "rollup": "^3.29.5",
-    "ws": "^8.18.0",
-    "nth-check": "^2.1.1",
-    "webpack-dev-server": ">=5.2.1",
-    "@babel/runtime": "^7.25.7",
-    "@babel/helpers": "^7.25.7",
-    "nanoid": "^3.3.7",
-    "webpack": "^5.94.0",
-    "micromatch": "^4.0.8",
-    "postcss": "^8.4.31",
-    "on-headers": ">=1.1.0",
-    "semver": "^7.6.3",
-    "brace-expansion": "^2.0.1"
-  },
-  "resolutions": {
-    "on-headers": ">=1.1.0"
   }
 }

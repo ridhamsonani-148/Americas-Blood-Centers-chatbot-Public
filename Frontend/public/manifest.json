@@ -10,6 +10,7 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#B71C1C",
-  "background_color": "#ffffff"
+  "theme_color": "#CC2345",
+  "background_color": "#F5F8FA",
+  "description": "AI-powered assistant for blood donation information and support"
 }

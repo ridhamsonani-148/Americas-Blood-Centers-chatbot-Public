@@ -1,22 +1,49 @@
 import { createTheme } from "@mui/material/styles"
+import {
+  PRIMARY_MAIN,
+  SECONDARY_MAIN,
+  DARK_BLUE,
+  LIGHT_BACKGROUND,
+  WHITE,
+  CHAT_LEFT_PANEL_BACKGROUND,
+  BOTMESSAGE_BACKGROUND,
+  USERMESSAGE_BACKGROUND,
+} from "./utilities/constants"
 
 const theme = createTheme({
   palette: {
     primary: {
-      main: "#B71C1C", // America's Blood Centers red
+      main: PRIMARY_MAIN,
       light: "#E57373",
-      dark: "#8B0000",
+      dark: DARK_BLUE,
     },
     secondary: {
-      main: "#D3D3D3",
+      main: SECONDARY_MAIN,
     },
     background: {
-      default: "#FFFFF7",
-      paper: "#FFFFFF",
+      default: LIGHT_BACKGROUND,
+      paper: WHITE,
+      chatBody: LIGHT_BACKGROUND,
+      chatLeftPanel: CHAT_LEFT_PANEL_BACKGROUND,
+      header: LIGHT_BACKGROUND,
+      botMessage: BOTMESSAGE_BACKGROUND,
+      userMessage: USERMESSAGE_BACKGROUND,
     },
   },
   typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+    fontFamily: [
+      "Roboto",
+      "-apple-system",
+      "BlinkMacSystemFont",
+      "Segoe UI",
+      "Oxygen",
+      "Ubuntu",
+      "Cantarell",
+      "Fira Sans",
+      "Droid Sans",
+      "Helvetica Neue",
+      "sans-serif",
+    ].join(","),
     h4: {
       fontWeight: 600,
     },

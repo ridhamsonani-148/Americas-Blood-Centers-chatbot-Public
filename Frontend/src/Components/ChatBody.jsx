@@ -1,18 +1,32 @@
-"use client"
-
-import { useState, useEffect, useRef } from "react"
-import { Box, CircularProgress, Typography } from "@mui/material"
+import React, { useState, useRef, useEffect } from "react"
+import { 
+  Box, 
+  TextField, 
+  IconButton, 
+  Typography,
+  Paper,
+  Grid,
+  Button,
+  CircularProgress
+} from "@mui/material"
+import { Send as SendIcon } from "@mui/icons-material"
+import FAQExamples from "./FAQExamples"
 import BotReply from "./BotReply"
 import UserReply from "./UserReply"
-import ChatInput from "./ChatInput"
-import FAQExamples from "./FAQExamples"
-import { CHAT_ENDPOINT } from "../utilities/constants"
-import { createMessageBlock, createWelcomeMessage, createErrorMessage } from "../utilities/createMessageBlock"
+import { 
+  getCurrentText, 
+  WHITE, 
+  PRIMARY_MAIN,
+  SECONDARY_MAIN,
+  LIGHT_BACKGROUND 
+} from "../utilities/constants"
 
-function ChatBody({ language = 'en' }) {
+function ChatBody({ currentLanguage }) {
   const [messages, setMessages] = useState([])
-  const [processing, setProcessing] = useState(false)
+  const [inputValue, setInputValue] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef(null)
+  const TEXT = getCurrentText(currentLanguage)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -22,56 +36,61 @@ function ChatBody({ language = 'en' }) {
     scrollToBottom()
   }, [messages])
 
-  useEffect(() => {
-    // Add welcome message
-    setMessages([createWelcomeMessage(language)])
-  }, [language])
+  const handleSendMessage = async () => {
+    if (!inputValue.trim() || isLoading) return
 
-  const sendMessage = async (messageText) => {
-    if (!messageText.trim() || processing) return
-
-    const userMessage = createMessageBlock(messageText, 'user')
-    setMessages(prev => [...prev, userMessage])
-    setProcessing(true)
+    const userMessage = inputValue.trim()
+    setInputValue("")
+    setMessages(prev => [...prev, { type: "user", content: userMessage }])
+    setIsLoading(true)
 
     try {
-      const response = await fetch(CHAT_ENDPOINT, {
-        method: 'POST',
+      // Replace with your actual API endpoint
+      const apiUrl = process.env.REACT_APP_API_BASE_URL || process.env.REACT_APP_CHAT_ENDPOINT
+      
+      const response = await fetch(apiUrl, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          message: messageText,
-          language: language,
-          conversation_id: `session_${Date.now()}`
+          message: userMessage,
+          language: currentLanguage,
         }),
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error("Failed to get response")
       }
 
       const data = await response.json()
       
-      const botMessage = createMessageBlock(
-        data.response || data.message || 'I apologize, but I encountered an error processing your request.',
-        'bot',
-        data.sources || []
-      )
-
-      setMessages(prev => [...prev, botMessage])
+      setMessages(prev => [...prev, { 
+        type: "bot", 
+        content: data.message || "I'm sorry, I couldn't process your request.",
+        sources: data.sources || []
+      }])
     } catch (error) {
-      console.error('Error sending message:', error)
-      
-      const errorMessage = createErrorMessage(language)
-      setMessages(prev => [...prev, errorMessage])
+      console.error("Error sending message:", error)
+      setMessages(prev => [...prev, { 
+        type: "bot", 
+        content: "I'm sorry, there was an error processing your request. Please try again.",
+        sources: []
+      }])
     } finally {
-      setProcessing(false)
+      setIsLoading(false)
     }
   }
 
-  const handlePromptClick = (prompt) => {
-    sendMessage(prompt)
+  const handleKeyPress = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault()
+      handleSendMessage()
+    }
+  }
+
+  const handleFAQClick = (question) => {
+    setInputValue(question)
   }
 
   return (
@@ -80,56 +99,82 @@ function ChatBody({ language = 'en' }) {
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        overflow: "hidden",
+        backgroundColor: LIGHT_BACKGROUND,
       }}
     >
       {/* Messages Area */}
       <Box
         sx={{
-          flex: "1 1 auto",
-          overflowY: "auto",
-          paddingBottom: "1rem",
-          minHeight: 0,
+          flex: 1,
+          overflow: "auto",
+          padding: "1rem",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        {/* FAQ Examples - Only show when there's just the welcome message */}
-        {messages.length === 1 && (
-          <Box sx={{ marginBottom: "2rem" }}>
-            <FAQExamples onPromptClick={handlePromptClick} language={language} />
+        {/* Welcome Message and FAQs */}
+        {messages.length === 0 && (
+          <Box sx={{ maxWidth: "800px", margin: "0 auto", width: "100%" }}>
+            {/* Welcome Section */}
+            <Box
+              sx={{
+                textAlign: "center",
+                mb: 4,
+                mt: 2,
+              }}
+            >
+              <Typography
+                variant="h4"
+                sx={{
+                  color: PRIMARY_MAIN,
+                  fontWeight: "bold",
+                  mb: 2,
+                  fontSize: { xs: "1.5rem", md: "2rem" },
+                }}
+              >
+                Bloodline
+              </Typography>
+              <Typography
+                variant="body1"
+                sx={{
+                  color: "#666",
+                  mb: 4,
+                  fontSize: "1.1rem",
+                }}
+              >
+                Learn about the blood supply, eligibility, and how you can save lives.
+              </Typography>
+            </Box>
+
+            {/* FAQ Examples */}
+            <FAQExamples 
+              currentLanguage={currentLanguage}
+              onFAQClick={handleFAQClick}
+            />
           </Box>
         )}
 
-        {/* Messages */}
-        <Box sx={{ maxWidth: "1000px", margin: "0 auto", width: "100%" }}>
-          {messages.map((message) => (
-            <Box key={message.id} sx={{ marginBottom: "1rem" }}>
-              {message.sender === 'user' ? (
-                <UserReply message={message.text} />
-              ) : (
-                <BotReply 
-                  message={message.text} 
-                  sources={message.sources}
-                />
-              )}
-            </Box>
-          ))}
+        {/* Chat Messages */}
+        {messages.map((message, index) => (
+          <Box key={index} sx={{ mb: 2, maxWidth: "800px", margin: "0 auto", width: "100%" }}>
+            {message.type === "user" ? (
+              <UserReply message={message.content} />
+            ) : (
+              <BotReply 
+                message={message.content} 
+                sources={message.sources}
+                currentLanguage={currentLanguage}
+              />
+            )}
+          </Box>
+        ))}
 
-          {processing && (
-            <Box 
-              sx={{ 
-                display: "flex", 
-                alignItems: "center", 
-                marginTop: "1rem",
-                marginBottom: "1rem",
-              }}
-            >
-              <CircularProgress size={20} sx={{ marginRight: "0.5rem" }} />
-              <Typography variant="body2" color="textSecondary">
-                {language === 'es' ? 'Escribiendo...' : 'Typing...'}
-              </Typography>
-            </Box>
-          )}
-        </Box>
+        {/* Loading Indicator */}
+        {isLoading && (
+          <Box sx={{ display: "flex", justifyContent: "center", my: 2 }}>
+            <CircularProgress size={24} sx={{ color: PRIMARY_MAIN }} />
+          </Box>
+        )}
 
         <div ref={messagesEndRef} />
       </Box>
@@ -137,14 +182,52 @@ function ChatBody({ language = 'en' }) {
       {/* Input Area */}
       <Box
         sx={{
-          flexShrink: 0,
-          paddingTop: "1rem",
-          maxWidth: "1000px",
-          margin: "0 auto",
-          width: "100%",
+          padding: "1rem",
+          backgroundColor: WHITE,
+          borderTop: "1px solid #E0E0E0",
         }}
       >
-        <ChatInput onSendMessage={sendMessage} processing={processing} language={language} />
+        <Box sx={{ maxWidth: "800px", margin: "0 auto" }}>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "flex-end" }}>
+            <TextField
+              fullWidth
+              multiline
+              maxRows={4}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={TEXT.CHAT_PLACEHOLDER}
+              variant="outlined"
+              disabled={isLoading}
+              sx={{
+                "& .MuiOutlinedInput-root": {
+                  borderRadius: "20px",
+                  backgroundColor: LIGHT_BACKGROUND,
+                },
+              }}
+            />
+            <IconButton
+              onClick={handleSendMessage}
+              disabled={!inputValue.trim() || isLoading}
+              sx={{
+                backgroundColor: PRIMARY_MAIN,
+                color: WHITE,
+                width: "48px",
+                height: "48px",
+                "&:hover": {
+                  backgroundColor: PRIMARY_MAIN,
+                  opacity: 0.8,
+                },
+                "&:disabled": {
+                  backgroundColor: "#ccc",
+                  color: "#666",
+                },
+              }}
+            >
+              <SendIcon />
+            </IconButton>
+          </Box>
+        </Box>
       </Box>
     </Box>
   )

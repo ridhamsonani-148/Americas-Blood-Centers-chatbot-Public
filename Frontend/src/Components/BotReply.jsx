@@ -1,81 +1,129 @@
-import { Grid, Avatar, Typography, Box, Link } from "@mui/material"
-import { BOTMESSAGE_BACKGROUND } from "../utilities/constants"
+import React from "react"
+import { 
+  Box, 
+  Typography, 
+  Avatar, 
+  Link,
+  Chip,
+  Paper
+} from "@mui/material"
+import { OpenInNew as OpenInNewIcon } from "@mui/icons-material"
+import AmericasBloodCentersLogo from "./AmericasBloodCentersLogo"
+import { 
+  BOTMESSAGE_BACKGROUND, 
+  PRIMARY_MAIN,
+  SECONDARY_MAIN,
+  WHITE 
+} from "../utilities/constants"
 
-function BotReply({ message, sources }) {
-  const formatMessageText = (text) => {
-    // Convert URLs to clickable links
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return text.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #B71C1C; text-decoration: underline;">$1</a>');
-  };
-
+function BotReply({ message, sources = [], currentLanguage }) {
   return (
-    <Grid container direction="row" justifyContent="flex-start" alignItems="flex-end" sx={{ marginTop: "1.5rem" }}>
-      <Grid item>
-        <Avatar 
-          alt="Bot Avatar" 
-          sx={{ 
-            width: 40, 
-            height: 40, 
-            backgroundColor: "#B71C1C",
-            color: "white",
-            fontWeight: "bold"
-          }}
-        >
-          ABC
-        </Avatar>
-      </Grid>
-      <Grid
-        item
-        className="botMessage"
+    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 2 }}>
+      {/* Bot Avatar */}
+      <Avatar
         sx={{
-          backgroundColor: BOTMESSAGE_BACKGROUND,
-          maxWidth: "75%", // Ensure maximum width
-          wordBreak: "break-word", // Break words to prevent overflow
-          overflowWrap: "break-word", // Ensure words wrap properly
-          whiteSpace: "pre-wrap", // Preserve whitespace but allow wrapping
-          marginLeft: "0.5rem",
-          padding: "0.75rem 1rem",
-          borderRadius: "1rem 1rem 1rem 0.25rem",
+          width: 40,
+          height: 40,
+          backgroundColor: PRIMARY_MAIN,
+          flexShrink: 0,
         }}
       >
-        <Typography
-          variant="body2"
+        <AmericasBloodCentersLogo color={WHITE} width={24} height={24} />
+      </Avatar>
+
+      {/* Message Content */}
+      <Box sx={{ flex: 1, maxWidth: "calc(100% - 50px)" }}>
+        {/* Message Text */}
+        <Paper
+          elevation={1}
           sx={{
-            wordBreak: "break-word",
-            overflowWrap: "break-word",
-            whiteSpace: "pre-wrap",
+            padding: "1rem",
+            backgroundColor: BOTMESSAGE_BACKGROUND,
+            borderRadius: "1rem 1rem 1rem 0.25rem",
+            mb: sources.length > 0 ? 1 : 0,
           }}
-          dangerouslySetInnerHTML={{ __html: formatMessageText(message) }}
-        />
-        
+        >
+          <Typography
+            variant="body1"
+            sx={{
+              lineHeight: 1.6,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {message}
+          </Typography>
+        </Paper>
+
+        {/* Sources */}
         {sources && sources.length > 0 && (
-          <Box sx={{ marginTop: "0.5rem", paddingTop: "0.5rem", borderTop: "1px solid #E0E0E0" }}>
-            <Typography variant="caption" sx={{ fontWeight: "bold", color: "#666" }}>
-              Sources:
+          <Box sx={{ mt: 1 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "#666",
+                mb: 1,
+                display: "block",
+                fontWeight: "medium",
+              }}
+            >
+              {currentLanguage === "es" ? "Fuentes:" : "Sources:"}
             </Typography>
-            {sources.map((source, index) => (
-              <Box key={index} sx={{ marginTop: "0.25rem" }}>
-                <Link
-                  href={source.uri || source.url}
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+              {sources.slice(0, 5).map((source, index) => (
+                <Chip
+                  key={index}
+                  label={
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                      <Typography variant="caption" sx={{ fontSize: "0.75rem" }}>
+                        {source.title || `Source ${index + 1}`}
+                      </Typography>
+                      <OpenInNewIcon sx={{ fontSize: "0.7rem" }} />
+                    </Box>
+                  }
+                  component={Link}
+                  href={source.url}
                   target="_blank"
                   rel="noopener noreferrer"
+                  clickable
+                  size="small"
+                  variant="outlined"
                   sx={{
-                    fontSize: "0.75rem",
-                    color: "#B71C1C",
+                    borderColor: SECONDARY_MAIN,
+                    color: SECONDARY_MAIN,
+                    fontSize: "0.7rem",
+                    height: "24px",
                     textDecoration: "none",
                     "&:hover": {
-                      textDecoration: "underline",
+                      borderColor: PRIMARY_MAIN,
+                      color: PRIMARY_MAIN,
+                      backgroundColor: "rgba(204, 35, 69, 0.05)",
+                      textDecoration: "none",
                     },
                   }}
-                >
-                  {source.title || source.uri || `Source ${index + 1}`}
-                </Link>
-              </Box>
-            ))}
+                />
+              ))}
+            </Box>
+            {sources.length > 5 && (
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "#666",
+                  mt: 0.5,
+                  display: "block",
+                  fontSize: "0.7rem",
+                }}
+              >
+                {currentLanguage === "es" 
+                  ? `+${sources.length - 5} fuentes más`
+                  : `+${sources.length - 5} more sources`
+                }
+              </Typography>
+            )}
           </Box>
         )}
-      </Grid>
-    </Grid>
+      </Box>
+    </Box>
   )
 }
 

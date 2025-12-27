@@ -1,49 +1,46 @@
-import { Grid, Avatar, Typography } from "@mui/material"
-import { USERMESSAGE_BACKGROUND } from "../utilities/constants"
+import React from "react"
+import { Box, Typography, Avatar, Paper } from "@mui/material"
+import { Person as PersonIcon } from "@mui/icons-material"
+import { USERMESSAGE_BACKGROUND, SECONDARY_MAIN, WHITE } from "../utilities/constants"
 
 function UserReply({ message }) {
   return (
-    <Grid container direction="row" justifyContent="flex-end" alignItems="flex-end" sx={{ marginTop: "1.5rem" }}>
-      <Grid
-        item
-        className="userMessage"
+    <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "flex-start", gap: 1, mb: 2 }}>
+      {/* Message Content */}
+      <Paper
+        elevation={1}
         sx={{
+          maxWidth: "75%",
+          padding: "1rem",
           backgroundColor: USERMESSAGE_BACKGROUND,
-          maxWidth: "75%", // Ensure maximum width
-          wordBreak: "break-word", // Break words to prevent overflow
-          overflowWrap: "break-word", // Ensure words wrap properly
-          whiteSpace: "pre-wrap", // Preserve whitespace but allow wrapping
-          marginRight: "0.5rem",
-          padding: "0.75rem 1rem",
           borderRadius: "1rem 1rem 0.25rem 1rem",
         }}
       >
         <Typography
-          variant="body2"
+          variant="body1"
           sx={{
-            wordBreak: "break-word",
-            overflowWrap: "break-word",
+            lineHeight: 1.6,
             whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
           }}
         >
           {message}
         </Typography>
-      </Grid>
-      <Grid item>
-        <Avatar 
-          alt="User Avatar" 
-          sx={{ 
-            width: 40, 
-            height: 40, 
-            backgroundColor: "#1976D2",
-            color: "white",
-            fontWeight: "bold"
-          }}
-        >
-          U
-        </Avatar>
-      </Grid>
-    </Grid>
+      </Paper>
+
+      {/* User Avatar */}
+      <Avatar
+        sx={{
+          width: 40,
+          height: 40,
+          backgroundColor: SECONDARY_MAIN,
+          color: WHITE,
+          flexShrink: 0,
+        }}
+      >
+        <PersonIcon />
+      </Avatar>
+    </Box>
   )
 }
 
