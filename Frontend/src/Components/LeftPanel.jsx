@@ -1,12 +1,10 @@
 import React from "react"
 import { Box, Typography, List, ListItem, ListItemText, Button, IconButton } from "@mui/material"
 import { Close as CloseIcon } from "@mui/icons-material"
-import AmericasBloodCentersLogo from "./AmericasBloodCentersLogo"
 import { 
   getCurrentText, 
   CHAT_LEFT_PANEL_BACKGROUND, 
-  WHITE,
-  SECONDARY_MAIN 
+  WHITE
 } from "../utilities/constants"
 
 function LeftPanel({ currentLanguage, toggleLanguage, onClose }) {
@@ -42,7 +40,15 @@ function LeftPanel({ currentLanguage, toggleLanguage, onClose }) {
 
       {/* Logo and Title */}
       <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
-        <AmericasBloodCentersLogo color={WHITE} width={40} height={40} />
+        <img 
+          src="/logo.png" 
+          alt="America's Blood Centers Logo" 
+          style={{ 
+            width: "40px", 
+            height: "40px",
+            objectFit: "contain"
+          }} 
+        />
         <Typography
           variant="h6"
           sx={{

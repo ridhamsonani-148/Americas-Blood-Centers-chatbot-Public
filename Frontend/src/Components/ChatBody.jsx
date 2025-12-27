@@ -4,9 +4,6 @@ import {
   TextField, 
   IconButton, 
   Typography,
-  Paper,
-  Grid,
-  Button,
   CircularProgress
 } from "@mui/material"
 import { Send as SendIcon } from "@mui/icons-material"
@@ -17,7 +14,6 @@ import {
   getCurrentText, 
   WHITE, 
   PRIMARY_MAIN,
-  SECONDARY_MAIN,
   LIGHT_BACKGROUND 
 } from "../utilities/constants"
 

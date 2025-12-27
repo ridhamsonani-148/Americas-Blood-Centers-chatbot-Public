@@ -4,17 +4,14 @@ import {
   Typography, 
   IconButton, 
   Button, 
-  Drawer,
-  useMediaQuery 
+  Drawer
 } from "@mui/material"
 import { Menu as MenuIcon, Settings as SettingsIcon } from "@mui/icons-material"
-import AmericasBloodCentersLogo from "./AmericasBloodCentersLogo"
 import LeftPanel from "./LeftPanel"
 import { 
   getCurrentText, 
   PRIMARY_MAIN, 
-  WHITE,
-  SECONDARY_MAIN 
+  WHITE
 } from "../utilities/constants"
 
 function ChatHeader({ currentLanguage, toggleLanguage, isMobile }) {
@@ -49,7 +46,15 @@ function ChatHeader({ currentLanguage, toggleLanguage, isMobile }) {
             </IconButton>
           )}
           
-          <AmericasBloodCentersLogo color={PRIMARY_MAIN} width={32} height={32} />
+          <img 
+            src="/logo.png" 
+            alt="America's Blood Centers Logo" 
+            style={{ 
+              width: "32px", 
+              height: "32px",
+              objectFit: "contain"
+            }} 
+          />
           <Typography
             variant="h6"
             sx={{

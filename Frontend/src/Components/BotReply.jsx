@@ -8,12 +8,10 @@ import {
   Paper
 } from "@mui/material"
 import { OpenInNew as OpenInNewIcon } from "@mui/icons-material"
-import AmericasBloodCentersLogo from "./AmericasBloodCentersLogo"
 import { 
   BOTMESSAGE_BACKGROUND, 
   PRIMARY_MAIN,
-  SECONDARY_MAIN,
-  WHITE 
+  SECONDARY_MAIN
 } from "../utilities/constants"
 
 function BotReply({ message, sources = [], currentLanguage }) {
@@ -28,7 +26,15 @@ function BotReply({ message, sources = [], currentLanguage }) {
           flexShrink: 0,
         }}
       >
-        <AmericasBloodCentersLogo color={WHITE} width={24} height={24} />
+        <img 
+          src="/logo.png" 
+          alt="America's Blood Centers Logo" 
+          style={{ 
+            width: "24px", 
+            height: "24px",
+            objectFit: "contain"
+          }} 
+        />
       </Avatar>
 
       {/* Message Content */}

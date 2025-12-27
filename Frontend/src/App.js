@@ -1,6 +1,6 @@
 import React, { useState } from "react"
 import { ThemeProvider } from "@mui/material/styles"
-import { CssBaseline, Box, Grid, useMediaQuery } from "@mui/material"
+import { CssBaseline, Box, useMediaQuery } from "@mui/material"
 import theme from "./theme"
 import ChatHeader from "./Components/ChatHeader"
 import ChatBody from "./Components/ChatBody"
