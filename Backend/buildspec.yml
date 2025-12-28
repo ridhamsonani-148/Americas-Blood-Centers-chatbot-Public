@@ -752,6 +752,73 @@ phases:
             echo "✓ Web Crawler Data Source created: $WEB_DS_ID"
           fi
           
+          # Create Daily Sync Data Source for specific URL updates
+          echo "Creating Daily Sync Data Source..."
+          echo "Checking for existing Daily Sync Data Source..."
+          
+          DAILY_DS_ID=$(aws bedrock-agent list-data-sources \
+            --knowledge-base-id "$KB_ID" \
+            --region "$CDK_DEFAULT_REGION" \
+            --query 'dataSourceSummaries[?name==`blood-centers-daily-sync`].dataSourceId' \
+            --output text)
+          
+          if [ -n "$DAILY_DS_ID" ] && [ "$DAILY_DS_ID" != "None" ]; then
+            echo "✓ Found existing Daily Sync Data Source: $DAILY_DS_ID"
+          else
+            echo "Creating new Daily Sync Data Source..."
+            
+            # Read daily sync URL
+            DAILY_SYNC_URL=$(aws s3 cp s3://$DOCUMENTS_BUCKET/daily-sync.txt - | head -1)
+            echo "Daily sync URL: $DAILY_SYNC_URL"
+            
+            DAILY_DS_ID=$(aws bedrock-agent create-data-source \
+              --knowledge-base-id "$KB_ID" \
+              --name "blood-centers-daily-sync" \
+              --description "Daily sync for specific blood donation pages" \
+              --region "$CDK_DEFAULT_REGION" \
+              --data-source-configuration '{
+                "type": "WEB",
+                "webConfiguration": {
+                  "sourceConfiguration": {
+                    "urlConfiguration": {
+                      "seedUrls": [{"url": "'$DAILY_SYNC_URL'"}]
+                    }
+                  },
+                  "crawlerConfiguration": {
+                    "crawlerLimits": {
+                      "rateLimit": 300,
+                      "maxPages": 50
+                    },
+                    "exclusionFilters": [
+                      ".*/wp-admin/.*", 
+                      ".*/login/.*", 
+                      ".*/admin/.*"
+                    ]
+                  }
+                }
+              }' \
+              --vector-ingestion-configuration '{
+                "chunkingConfiguration": {
+                  "chunkingStrategy": "SEMANTIC",
+                  "semanticChunkingConfiguration": {
+                    "maxTokens": 1500,
+                    "bufferSize": 0,
+                    "breakpointPercentileThreshold": 95
+                  }
+                },
+                "parsingConfiguration": {
+                  "parsingStrategy": "BEDROCK_DATA_AUTOMATION",
+                  "bedrockDataAutomationConfiguration": {
+                    "parsingModality": "MULTIMODAL"
+                  }
+                }
+              }' \
+              --query 'dataSource.dataSourceId' \
+              --output text)
+            
+            echo "✓ Daily Sync Data Source created: $DAILY_DS_ID"
+          fi
+          
           # Set primary data source ID for backward compatibility
           DS_ID="$S3_DS_ID"
           
@@ -793,7 +860,8 @@ phases:
             --arg kb_id "$KB_ID" \
             --arg s3_ds_id "$S3_DS_ID" \
             --arg web_ds_id "$WEB_DS_ID" \
-            '{Variables: (. + {KNOWLEDGE_BASE_ID: $kb_id, S3_DATA_SOURCE_ID: $s3_ds_id, WEB_DATA_SOURCE_ID: $web_ds_id, DATA_SOURCE_ID: $s3_ds_id})}' > /tmp/data_env.json
+            --arg daily_ds_id "$DAILY_DS_ID" \
+            '{Variables: (. + {KNOWLEDGE_BASE_ID: $kb_id, S3_DATA_SOURCE_ID: $s3_ds_id, WEB_DATA_SOURCE_ID: $web_ds_id, DAILY_SYNC_DATA_SOURCE_ID: $daily_ds_id, DATA_SOURCE_ID: $s3_ds_id})}' > /tmp/data_env.json
           
           aws lambda update-function-configuration \
             --function-name "$DATA_INGESTION_LAMBDA_NAME" \

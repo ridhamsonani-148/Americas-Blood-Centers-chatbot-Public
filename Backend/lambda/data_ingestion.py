@@ -26,6 +26,7 @@ DOCUMENTS_BUCKET = os.environ.get('DOCUMENTS_BUCKET')
 KNOWLEDGE_BASE_ID = os.environ.get('KNOWLEDGE_BASE_ID')
 S3_DATA_SOURCE_ID = os.environ.get('S3_DATA_SOURCE_ID')
 WEB_DATA_SOURCE_ID = os.environ.get('WEB_DATA_SOURCE_ID')
+DAILY_SYNC_DATA_SOURCE_ID = os.environ.get('DAILY_SYNC_DATA_SOURCE_ID')
 # Backward compatibility
 DATA_SOURCE_ID = os.environ.get('DATA_SOURCE_ID', S3_DATA_SOURCE_ID)
 
@@ -45,6 +46,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         results = {
             's3_ingestion_job': None,
             'web_ingestion_job': None,
+            'daily_sync_job': None,
             'pdfs_processed': 0,
             'urls_noted': len(urls)
         }
@@ -67,7 +69,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.info(f"URLs will be crawled automatically by Web Crawler Data Source: {urls}")
             logger.info("No manual web scraping needed - Web Crawler Data Source handles this automatically")
         
-        # Start ingestion jobs based on data source type
+        # Start ingestion jobs based on data source type and sync type
         if data_source_type in ['both', 's3'] and S3_DATA_SOURCE_ID:
             try:
                 s3_job = start_ingestion_job(
@@ -79,16 +81,29 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             except Exception as e:
                 logger.error(f"Failed to start S3 ingestion job: {str(e)}")
         
-        if data_source_type in ['both', 'web'] and WEB_DATA_SOURCE_ID:
-            try:
-                web_job = start_ingestion_job(
-                    WEB_DATA_SOURCE_ID, 
-                    f"{sync_type} crawling of America's Blood Centers websites"
-                )
-                results['web_ingestion_job'] = web_job.get('ingestionJobId')
-                logger.info(f"Started Web Crawler ingestion job: {results['web_ingestion_job']}")
-            except Exception as e:
-                logger.error(f"Failed to start Web Crawler ingestion job: {str(e)}")
+        if data_source_type in ['both', 'web']:
+            # For daily sync, use the dedicated daily sync data source
+            if sync_type == 'daily' and DAILY_SYNC_DATA_SOURCE_ID:
+                try:
+                    daily_job = start_ingestion_job(
+                        DAILY_SYNC_DATA_SOURCE_ID, 
+                        f"Daily sync of specific blood donation pages"
+                    )
+                    results['daily_sync_job'] = daily_job.get('ingestionJobId')
+                    logger.info(f"Started Daily Sync ingestion job: {results['daily_sync_job']}")
+                except Exception as e:
+                    logger.error(f"Failed to start Daily Sync ingestion job: {str(e)}")
+            # For other sync types, use the main web crawler
+            elif WEB_DATA_SOURCE_ID:
+                try:
+                    web_job = start_ingestion_job(
+                        WEB_DATA_SOURCE_ID, 
+                        f"{sync_type} crawling of America's Blood Centers websites"
+                    )
+                    results['web_ingestion_job'] = web_job.get('ingestionJobId')
+                    logger.info(f"Started Web Crawler ingestion job: {results['web_ingestion_job']}")
+                except Exception as e:
+                    logger.error(f"Failed to start Web Crawler ingestion job: {str(e)}")
         
         return {
             'statusCode': 200,
