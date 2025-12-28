@@ -9,7 +9,7 @@ import { WHITE, LIGHT_BACKGROUND, PRIMARY_MAIN } from "./utilities/constants"
 
 function App() {
   const [currentLanguage, setCurrentLanguage] = useState("en")
-  const [showLeftNav, setLeftNav] = useState(true)
+  const [showLeftNav, setLeftNav] = useState(false) // Changed to false by default
   const isMobile = useMediaQuery("(max-width:768px)")
   const isSmallScreen = useMediaQuery("(max-width:600px)")
 
@@ -17,13 +17,12 @@ function App() {
     setCurrentLanguage(currentLanguage === "en" ? "es" : "en")
   }
 
-  // Close navbar automatically on small screens
+  // Close navbar automatically on small screens, but keep it closed by default on desktop too
   useEffect(() => {
     if (isMobile) {
       setLeftNav(false)
-    } else {
-      setLeftNav(true)
     }
+    // Removed the else clause that was opening it on desktop
   }, [isMobile])
 
   return (

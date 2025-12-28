@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useState } from "react"
 import { 
   Box, 
   Typography, 
@@ -16,6 +16,15 @@ import {
 } from "../utilities/constants"
 
 function BotReply({ message, sources = [], currentLanguage }) {
+  const [showAllSources, setShowAllSources] = useState(false)
+  
+  // Remove duplicate sources based on URL
+  const uniqueSources = sources.filter((source, index, self) => 
+    index === self.findIndex(s => s.url === source.url)
+  )
+  
+  const displayedSources = showAllSources ? uniqueSources : uniqueSources.slice(0, 3)
+  const remainingSources = uniqueSources.length - 3
   return (
     <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 3 }}>
       {/* Bot Avatar */}
@@ -87,53 +96,42 @@ function BotReply({ message, sources = [], currentLanguage }) {
         ) : null}
 
         {/* Sources */}
-        {sources && sources.length > 0 && (
+        {uniqueSources && uniqueSources.length > 0 && (
           <Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "#666",
-                  fontWeight: "medium",
-                  fontSize: "0.85rem",
-                }}
-              >
-                📄 {currentLanguage === "es" ? "Fuentes" : "Sources"}
-              </Typography>
-            </Box>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "#666",
+                fontWeight: "medium",
+                fontSize: "0.85rem",
+                mb: 1,
+              }}
+            >
+              📄 {currentLanguage === "es" ? "Fuentes" : "Sources"}
+            </Typography>
             
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-              {sources.slice(0, 3).map((source, index) => (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+              {displayedSources.map((source, index) => (
                 <Box key={index} sx={{ 
-                  padding: "0.75rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  padding: "0.5rem",
                   backgroundColor: "#F8F9FA",
-                  borderRadius: "6px",
+                  borderRadius: "4px",
                   border: "1px solid #E0E0E0"
                 }}>
                   <Typography
                     variant="body2"
                     sx={{
                       color: DARK_BLUE,
-                      fontSize: "0.85rem",
+                      fontSize: "0.8rem",
                       fontWeight: "medium",
-                      mb: 0.5,
+                      flex: 1,
+                      minWidth: 0, // Allow text to shrink
                     }}
                   >
                     {source.title || `Source ${index + 1}`}
-                  </Typography>
-                  
-                  {/* Show the actual URL */}
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      color: "#666",
-                      fontSize: "0.75rem",
-                      display: "block",
-                      mb: 1,
-                      wordBreak: "break-all",
-                    }}
-                  >
-                    {source.url}
                   </Typography>
                   
                   <Button
@@ -143,14 +141,16 @@ function BotReply({ message, sources = [], currentLanguage }) {
                     rel="noopener noreferrer"
                     variant="outlined"
                     size="small"
-                    endIcon={<OpenInNewIcon sx={{ fontSize: "0.8rem" }} />}
+                    endIcon={<OpenInNewIcon sx={{ fontSize: "0.7rem" }} />}
                     sx={{
                       borderColor: PRIMARY_MAIN,
                       color: PRIMARY_MAIN,
-                      fontSize: "0.75rem",
+                      fontSize: "0.7rem",
                       textTransform: "none",
                       borderRadius: "4px",
-                      padding: "4px 8px",
+                      padding: "2px 6px",
+                      minWidth: "auto",
+                      flexShrink: 0,
                       "&:hover": {
                         borderColor: SECONDARY_MAIN,
                         color: SECONDARY_MAIN,
@@ -158,27 +158,36 @@ function BotReply({ message, sources = [], currentLanguage }) {
                       },
                     }}
                   >
-                    {source.url.includes('.pdf') ? 'View PDF' : 'Visit Website'}
+                    {source.url.includes('.pdf') ? 'PDF' : 'Visit'}
                   </Button>
                 </Box>
               ))}
             </Box>
             
-            {sources.length > 3 && (
-              <Typography
-                variant="caption"
+            {/* Show remaining sources count and expand button */}
+            {remainingSources > 0 && (
+              <Button
+                variant="text"
+                size="small"
+                onClick={() => setShowAllSources(!showAllSources)}
                 sx={{
-                  color: "#666",
-                  mt: 1,
-                  display: "block",
+                  color: PRIMARY_MAIN,
                   fontSize: "0.75rem",
+                  textTransform: "none",
+                  mt: 0.5,
+                  padding: "2px 4px",
+                  "&:hover": {
+                    backgroundColor: "rgba(0, 97, 164, 0.05)",
+                  },
                 }}
               >
-                {currentLanguage === "es" 
-                  ? `+${sources.length - 3} fuentes más`
-                  : `+${sources.length - 3} more sources`
+                {showAllSources 
+                  ? (currentLanguage === "es" ? "Mostrar menos" : "Show less")
+                  : (currentLanguage === "es" 
+                      ? `+${remainingSources} fuentes más` 
+                      : `+${remainingSources} more sources`)
                 }
-              </Typography>
+              </Button>
             )}
           </Box>
         )}
