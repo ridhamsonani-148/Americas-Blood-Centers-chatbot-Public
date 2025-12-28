@@ -113,53 +113,41 @@ function BotReply({ message, sources = [], currentLanguage }) {
             <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
               {displayedSources.map((source, index) => (
                 <Box key={index} sx={{ 
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
                   padding: "0.5rem",
                   backgroundColor: "#F8F9FA",
                   borderRadius: "4px",
                   border: "1px solid #E0E0E0"
                 }}>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: DARK_BLUE,
-                      fontSize: "0.8rem",
-                      fontWeight: "medium",
-                      flex: 1,
-                      minWidth: 0, // Allow text to shrink
-                    }}
-                  >
-                    {source.title || `Source ${index + 1}`}
-                  </Typography>
-                  
-                  <Button
-                    component={Link}
+                  <Link
                     href={source.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    variant="outlined"
-                    size="small"
-                    endIcon={<OpenInNewIcon sx={{ fontSize: "0.7rem" }} />}
                     sx={{
-                      borderColor: PRIMARY_MAIN,
                       color: PRIMARY_MAIN,
-                      fontSize: "0.7rem",
-                      textTransform: "none",
-                      borderRadius: "4px",
-                      padding: "2px 6px",
-                      minWidth: "auto",
-                      flexShrink: 0,
+                      fontSize: "0.8rem",
+                      fontWeight: "medium",
+                      textDecoration: "none",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 0.5,
                       "&:hover": {
-                        borderColor: SECONDARY_MAIN,
                         color: SECONDARY_MAIN,
-                        backgroundColor: "rgba(0, 97, 164, 0.05)",
+                        textDecoration: "underline",
                       },
                     }}
                   >
-                    {source.url.includes('.pdf') ? 'PDF' : 'Visit'}
-                  </Button>
+                    {/* Show PDF or web icon */}
+                    {source.url.includes('.pdf') ? '📄' : '🌐'}
+                    
+                    {/* Show the actual title or extract filename from URL */}
+                    {source.title || 
+                     (source.url.includes('.pdf') 
+                       ? source.url.split('/').pop().replace('.pdf', '') 
+                       : source.url.replace(/^https?:\/\//, '').split('/')[0])
+                    }
+                    
+                    <OpenInNewIcon sx={{ fontSize: "0.7rem", ml: 0.5 }} />
+                  </Link>
                 </Box>
               ))}
             </Box>
