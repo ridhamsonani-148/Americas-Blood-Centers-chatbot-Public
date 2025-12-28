@@ -19,23 +19,44 @@ function BotReply({ message, sources = [], currentLanguage }) {
   
   // Function to get clean display name for sources
   const getDisplayName = (source) => {
+    // Handle S3 presigned URLs and regular URLs
+    let cleanUrl = source.url
+    
+    // For S3 presigned URLs, extract the original path before query parameters
+    if (source.url.includes('amazonaws.com') && source.url.includes('?')) {
+      cleanUrl = source.url.split('?')[0]
+    }
+    
     // For PDFs, show the filename without extension
-    if (source.url.includes('.pdf')) {
-      const filename = source.url.split('/').pop()
+    if (cleanUrl.includes('.pdf')) {
+      const filename = cleanUrl.split('/').pop()
       return filename.replace('.pdf', '')
     }
     
-    // For websites, use title if available and not generic, otherwise show hostname
+    // For websites, use title if available and not generic, otherwise show clean URL
     if (source.title && source.title !== "Web Page") {
       return source.title
     }
     
-    // Fallback: show clean hostname from URL
+    // Fallback: show clean hostname and path from URL
     try {
-      const urlObj = new URL(source.url)
-      return urlObj.hostname.replace('www.', '') + urlObj.pathname
+      const urlObj = new URL(cleanUrl)
+      const hostname = urlObj.hostname.replace('www.', '')
+      const pathname = urlObj.pathname
+      
+      // For S3 URLs, just show the filename
+      if (hostname.includes('amazonaws.com')) {
+        const filename = pathname.split('/').pop()
+        return filename.replace('.pdf', '')
+      }
+      
+      // For regular websites, show hostname + path
+      return hostname + pathname
     } catch (e) {
-      return source.url
+      // If URL parsing fails, try to extract filename from the end
+      const parts = cleanUrl.split('/')
+      const lastPart = parts[parts.length - 1]
+      return lastPart.replace('.pdf', '') || cleanUrl
     }
   }
   

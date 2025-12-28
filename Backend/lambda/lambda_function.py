@@ -347,10 +347,11 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
                 # Extract filename for title
                 if 'pdfs/' in s3_uri:
                     filename = s3_uri.split('/')[-1]
-                    source_title = filename.replace('.pdf', '').replace('-', ' ').replace('_', ' ').title()
+                    # Keep original filename (don't convert to title case)
+                    source_title = filename.replace('.pdf', '')
                 else:
                     filename = s3_uri.split('/')[-1] if '/' in s3_uri else s3_uri
-                    source_title = filename.replace('.pdf', '').replace('-', ' ').replace('_', ' ').title()
+                    source_title = filename.replace('.pdf', '')
         
         elif 'webLocation' in location:
             # Web crawler source
@@ -367,7 +368,8 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
             
             if source_url and 's3://' in source_url:
                 filename = source_url.split('/')[-1] if '/' in source_url else source_url
-                source_title = filename.replace('.pdf', '').replace('-', ' ').replace('_', ' ').title()
+                # Keep original filename for PDFs (don't convert to title case)
+                source_title = filename.replace('.pdf', '')
             else:
                 source_title = metadata.get('title', metadata.get('source', 'Document'))
         
