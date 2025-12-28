@@ -720,7 +720,7 @@ phases:
                     "exclusionFilters": [
                       ".*/wp-admin/.*", 
                       ".*/login/.*", 
-                      ".*/admin/.*",
+                      ".*/admin/.*"
                     ],
                     "inclusionFilters": [
                     ]
