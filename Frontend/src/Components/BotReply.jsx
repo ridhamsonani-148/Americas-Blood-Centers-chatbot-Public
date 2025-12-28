@@ -11,7 +11,8 @@ import {
   PRIMARY_MAIN,
   SECONDARY_MAIN,
   WHITE,
-  LIGHT_BACKGROUND
+  LIGHT_BACKGROUND,
+  DARK_BLUE
 } from "../utilities/constants"
 
 function BotReply({ message, sources = [], currentLanguage }) {
@@ -97,23 +98,44 @@ function BotReply({ message, sources = [], currentLanguage }) {
                   fontSize: "0.85rem",
                 }}
               >
-                📄 {currentLanguage === "es" ? "Fuente" : "Source"}
+                📄 {currentLanguage === "es" ? "Fuentes" : "Sources"}
               </Typography>
             </Box>
             
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
               {sources.slice(0, 3).map((source, index) => (
-                <Box key={index}>
+                <Box key={index} sx={{ 
+                  padding: "0.75rem",
+                  backgroundColor: "#F8F9FA",
+                  borderRadius: "6px",
+                  border: "1px solid #E0E0E0"
+                }}>
                   <Typography
                     variant="body2"
                     sx={{
-                      color: "#666",
-                      fontSize: "0.8rem",
+                      color: DARK_BLUE,
+                      fontSize: "0.85rem",
+                      fontWeight: "medium",
                       mb: 0.5,
                     }}
                   >
                     {source.title || `Source ${index + 1}`}
                   </Typography>
+                  
+                  {/* Show the actual URL */}
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "#666",
+                      fontSize: "0.75rem",
+                      display: "block",
+                      mb: 1,
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    {source.url}
+                  </Typography>
+                  
                   <Button
                     component={Link}
                     href={source.url}
@@ -128,6 +150,7 @@ function BotReply({ message, sources = [], currentLanguage }) {
                       fontSize: "0.75rem",
                       textTransform: "none",
                       borderRadius: "4px",
+                      padding: "4px 8px",
                       "&:hover": {
                         borderColor: SECONDARY_MAIN,
                         color: SECONDARY_MAIN,
@@ -135,7 +158,7 @@ function BotReply({ message, sources = [], currentLanguage }) {
                       },
                     }}
                   >
-                    Open Source
+                    {source.url.includes('.pdf') ? 'View PDF' : 'Visit Website'}
                   </Button>
                 </Box>
               ))}
