@@ -17,6 +17,28 @@ import {
 function BotReply({ message, sources = [], currentLanguage }) {
   const [showAllSources, setShowAllSources] = useState(false)
   
+  // Function to get clean display name for sources
+  const getDisplayName = (source) => {
+    // For PDFs, show the filename without extension
+    if (source.url.includes('.pdf')) {
+      const filename = source.url.split('/').pop()
+      return filename.replace('.pdf', '')
+    }
+    
+    // For websites, use title if available and not generic, otherwise show hostname
+    if (source.title && source.title !== "Web Page") {
+      return source.title
+    }
+    
+    // Fallback: show clean hostname from URL
+    try {
+      const urlObj = new URL(source.url)
+      return urlObj.hostname.replace('www.', '') + urlObj.pathname
+    } catch (e) {
+      return source.url
+    }
+  }
+  
   const displayedSources = showAllSources ? sources : sources.slice(0, 3)
   const remainingSources = sources.length - 3
   return (
@@ -133,8 +155,8 @@ function BotReply({ message, sources = [], currentLanguage }) {
                     {/* Show PDF or web icon */}
                     {source.url.includes('.pdf') ? '📄' : '🌐'}
                     
-                    {/* Show the source title or URL */}
-                    {source.title || source.url.split('/').pop()}
+                    {/* Show meaningful display name */}
+                    {getDisplayName(source)}
                     
                     <OpenInNewIcon sx={{ fontSize: "0.7rem", ml: 0.5 }} />
                   </Link>
