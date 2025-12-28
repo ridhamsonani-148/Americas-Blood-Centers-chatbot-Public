@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import { useState } from "react"
 import { 
   Box, 
   Typography, 
@@ -11,53 +11,14 @@ import {
   PRIMARY_MAIN,
   SECONDARY_MAIN,
   WHITE,
-  LIGHT_BACKGROUND,
-  DARK_BLUE
+  LIGHT_BACKGROUND
 } from "../utilities/constants"
 
 function BotReply({ message, sources = [], currentLanguage }) {
   const [showAllSources, setShowAllSources] = useState(false)
   
-  // Function to normalize titles/URLs for better deduplication
-  const normalizeForDeduplication = (source) => {
-    const url = source.url.toLowerCase()
-    
-    // For PDFs, use the filename as the key
-    if (url.includes('.pdf')) {
-      const filename = url.split('/').pop()
-      // Remove version numbers and normalize
-      return filename.replace(/-v-?\d+(\.\d+)?/g, '').replace(/\.(final|v\d+)/g, '')
-    }
-    
-    // For websites, use the base URL without query params
-    try {
-      const urlObj = new URL(source.url)
-      return `${urlObj.hostname}${urlObj.pathname}`.toLowerCase()
-    } catch (e) {
-      return source.url.toLowerCase()
-    }
-  }
-  
-  // Smart deduplication - group by normalized key but keep the best title
-  const uniqueSources = sources.reduce((acc, source) => {
-    const normalizedKey = normalizeForDeduplication(source)
-    const existing = acc.find(s => normalizeForDeduplication(s) === normalizedKey)
-    
-    if (!existing) {
-      acc.push(source)
-    } else {
-      // Keep the source with the better title (not "Web Page")
-      if (source.title && source.title !== "Web Page" && existing.title === "Web Page") {
-        const index = acc.indexOf(existing)
-        acc[index] = source
-      }
-    }
-    
-    return acc
-  }, [])
-  
-  const displayedSources = showAllSources ? uniqueSources : uniqueSources.slice(0, 3)
-  const remainingSources = uniqueSources.length - 3
+  const displayedSources = showAllSources ? sources : sources.slice(0, 3)
+  const remainingSources = sources.length - 3
   return (
     <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 3 }}>
       {/* Bot Avatar */}
@@ -129,7 +90,7 @@ function BotReply({ message, sources = [], currentLanguage }) {
         ) : null}
 
         {/* Sources */}
-        {uniqueSources && uniqueSources.length > 0 && (
+        {sources && sources.length > 0 && (
           <Box>
             <Typography
               variant="body2"
@@ -172,8 +133,8 @@ function BotReply({ message, sources = [], currentLanguage }) {
                     {/* Show PDF or web icon */}
                     {source.url.includes('.pdf') ? '📄' : '🌐'}
                     
-                    {/* Show the meaningful display name */}
-                    {getDisplayName(source)}
+                    {/* Show the source title or URL */}
+                    {source.title || source.url.split('/').pop()}
                     
                     <OpenInNewIcon sx={{ fontSize: "0.7rem", ml: 0.5 }} />
                   </Link>
