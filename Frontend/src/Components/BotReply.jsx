@@ -18,7 +18,23 @@ import {
 function BotReply({ message, sources = [], currentLanguage }) {
   const [showAllSources, setShowAllSources] = useState(false)
   
-  // Remove duplicate sources based on URL
+  // Function to get display name - simple logic
+  const getDisplayName = (source) => {
+    // If title exists and is not generic, use it
+    if (source.title && source.title !== "Web Page") {
+      return source.title
+    }
+    
+    // For PDFs, show just the filename
+    if (source.url.includes('.pdf')) {
+      return source.url.split('/').pop()
+    }
+    
+    // For websites, show the full URL
+    return source.url
+  }
+  
+  // Simple duplicate removal based on URL
   const uniqueSources = sources.filter((source, index, self) => 
     index === self.findIndex(s => s.url === source.url)
   )
@@ -139,12 +155,8 @@ function BotReply({ message, sources = [], currentLanguage }) {
                     {/* Show PDF or web icon */}
                     {source.url.includes('.pdf') ? '📄' : '🌐'}
                     
-                    {/* Show the actual title or extract filename from URL */}
-                    {source.title || 
-                     (source.url.includes('.pdf') 
-                       ? source.url.split('/').pop().replace('.pdf', '') 
-                       : source.url.replace(/^https?:\/\//, '').split('/')[0])
-                    }
+                    {/* Show the meaningful display name */}
+                    {getDisplayName(source)}
                     
                     <OpenInNewIcon sx={{ fontSize: "0.7rem", ml: 0.5 }} />
                   </Link>
