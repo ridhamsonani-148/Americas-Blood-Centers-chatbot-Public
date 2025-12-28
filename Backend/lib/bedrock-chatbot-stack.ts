@@ -215,11 +215,20 @@ export class BedrockChatbotStack extends cdk.Stack {
                 'bedrock:InvokeModelWithResponseStream',
               ],
               resources: [
+                // Direct foundation model access
                 `arn:aws:bedrock:${this.region}::foundation-model/${modelId}`,
                 `arn:aws:bedrock:${this.region}::foundation-model/${embeddingModelId}`,
-                // Support for inference profiles (cross-region models)
+                // Support for all foundation models in current region
+                `arn:aws:bedrock:${this.region}::foundation-model/*`,
+                // Support for cross-region foundation models (needed for inference profiles)
+                `arn:aws:bedrock:*::foundation-model/*`,
+                // Support for global foundation models (no region specified)
+                `arn:aws:bedrock:::foundation-model/*`,
+                // Support for inference profiles
                 `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/*`,
                 `arn:aws:bedrock:*:${this.account}:inference-profile/*`,
+                // Support for cross-region inference profiles (global profiles)
+                `arn:aws:bedrock:*::inference-profile/*`,
               ],
             }),
             // Bedrock Knowledge Base access
@@ -333,8 +342,8 @@ export class BedrockChatbotStack extends cdk.Stack {
         KNOWLEDGE_BASE_ID: 'PLACEHOLDER_KB_ID', // Will be updated after KB creation
         MODEL_ID: modelId,
         EMBEDDING_MODEL_ID: embeddingModelId,
-        MAX_TOKENS: '1000',
-        TEMPERATURE: '0.0',
+        MAX_TOKENS: '1000', // Increased for better responses with Claude Sonnet
+        TEMPERATURE: '0.1',
         DOCUMENTS_BUCKET: documentsBucket.bucketName,
       },
       description: 'America\'s Blood Centers Bedrock Chat Handler',

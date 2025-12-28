@@ -18,26 +18,43 @@ import {
 function BotReply({ message, sources = [], currentLanguage }) {
   const [showAllSources, setShowAllSources] = useState(false)
   
-  // Function to get display name - simple logic
-  const getDisplayName = (source) => {
-    // If title exists and is not generic, use it
-    if (source.title && source.title !== "Web Page") {
-      return source.title
+  // Function to normalize titles/URLs for better deduplication
+  const normalizeForDeduplication = (source) => {
+    const url = source.url.toLowerCase()
+    
+    // For PDFs, use the filename as the key
+    if (url.includes('.pdf')) {
+      const filename = url.split('/').pop()
+      // Remove version numbers and normalize
+      return filename.replace(/-v-?\d+(\.\d+)?/g, '').replace(/\.(final|v\d+)/g, '')
     }
     
-    // For PDFs, show just the filename
-    if (source.url.includes('.pdf')) {
-      return source.url.split('/').pop()
+    // For websites, use the base URL without query params
+    try {
+      const urlObj = new URL(source.url)
+      return `${urlObj.hostname}${urlObj.pathname}`.toLowerCase()
+    } catch (e) {
+      return source.url.toLowerCase()
     }
-    
-    // For websites, show the full URL
-    return source.url
   }
   
-  // Simple duplicate removal based on URL
-  const uniqueSources = sources.filter((source, index, self) => 
-    index === self.findIndex(s => s.url === source.url)
-  )
+  // Smart deduplication - group by normalized key but keep the best title
+  const uniqueSources = sources.reduce((acc, source) => {
+    const normalizedKey = normalizeForDeduplication(source)
+    const existing = acc.find(s => normalizeForDeduplication(s) === normalizedKey)
+    
+    if (!existing) {
+      acc.push(source)
+    } else {
+      // Keep the source with the better title (not "Web Page")
+      if (source.title && source.title !== "Web Page" && existing.title === "Web Page") {
+        const index = acc.indexOf(existing)
+        acc[index] = source
+      }
+    }
+    
+    return acc
+  }, [])
   
   const displayedSources = showAllSources ? uniqueSources : uniqueSources.slice(0, 3)
   const remainingSources = uniqueSources.length - 3
