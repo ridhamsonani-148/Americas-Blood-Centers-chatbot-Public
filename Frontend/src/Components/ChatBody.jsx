@@ -4,9 +4,12 @@ import {
   TextField, 
   IconButton, 
   Typography,
-  CircularProgress
+  CircularProgress,
+  ButtonGroup,
+  Button,
+  useMediaQuery
 } from "@mui/material"
-import { Send as SendIcon } from "@mui/icons-material"
+import { Send as SendIcon, Menu as MenuIcon } from "@mui/icons-material"
 import FAQExamples from "./FAQExamples"
 import BotReply from "./BotReply"
 import UserReply from "./UserReply"
@@ -14,14 +17,16 @@ import {
   getCurrentText, 
   WHITE, 
   PRIMARY_MAIN,
-  LIGHT_BACKGROUND 
+  LIGHT_BACKGROUND,
+  DARK_BLUE
 } from "../utilities/constants"
 
-function ChatBody({ currentLanguage }) {
+function ChatBody({ currentLanguage, toggleLanguage, showLeftNav, setLeftNav }) {
   const [messages, setMessages] = useState([])
   const [inputValue, setInputValue] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef(null)
+  const isSmallScreen = useMediaQuery("(max-width:600px)")
   const TEXT = getCurrentText(currentLanguage)
 
   const scrollToBottom = () => {
@@ -32,12 +37,12 @@ function ChatBody({ currentLanguage }) {
     scrollToBottom()
   }, [messages])
 
-  const handleSendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return
+  const handleSendMessage = async (messageText = null) => {
+    const messageToSend = messageText || inputValue.trim()
+    if (!messageToSend || isLoading) return
 
-    const userMessage = inputValue.trim()
     setInputValue("")
-    setMessages(prev => [...prev, { type: "user", content: userMessage }])
+    setMessages(prev => [...prev, { type: "user", content: messageToSend }])
     setIsLoading(true)
 
     try {
@@ -50,7 +55,7 @@ function ChatBody({ currentLanguage }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          message: userMessage,
+          message: messageToSend,
           language: currentLanguage,
         }),
       })
@@ -78,7 +83,7 @@ function ChatBody({ currentLanguage }) {
     }
   }
 
-  const handleKeyPress = (event) => {
+  const handleKeyDown = (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
       handleSendMessage()
@@ -86,7 +91,8 @@ function ChatBody({ currentLanguage }) {
   }
 
   const handleFAQClick = (question) => {
-    setInputValue(question)
+    // Directly send the FAQ question as a message
+    handleSendMessage(question)
   }
 
   return (
@@ -96,133 +102,262 @@ function ChatBody({ currentLanguage }) {
         display: "flex",
         flexDirection: "column",
         backgroundColor: LIGHT_BACKGROUND,
+        overflow: "hidden", // Prevent scrollbar on main container
       }}
     >
-      {/* Messages Area */}
+      {/* Integrated Header with Logo and Language Toggle */}
+      <Box
+        sx={{
+          padding: { xs: "0.5rem 1rem", sm: "0.75rem 1.5rem", md: "1rem 2rem" }, // Reduced top padding
+          paddingBottom: { xs: "0.5rem", sm: "1rem" },
+        }}
+      >
+        {/* Top Row: Logo (left) and Language Toggle (right) */}
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            mb: { xs: 1, sm: 1.5 },
+            ml: !isSmallScreen && !showLeftNav ? "50px" : "10px", // Add left margin when floating menu is visible
+          }}
+        >
+          {/* Left side: Mobile Menu + Logo */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            {/* Mobile Menu Button */}
+            {isSmallScreen && (
+              <IconButton
+                onClick={() => setLeftNav && setLeftNav(true)}
+                sx={{
+                  color: PRIMARY_MAIN,
+                  padding: "5px",
+                }}
+              >
+                <MenuIcon />
+              </IconButton>
+            )}
+            
+            <img
+              src="/logo.png"
+              alt="America's Blood Centers"
+              width={isSmallScreen ? "80" : "250"} // Increased from 60/80 to 80/120
+              height={isSmallScreen ? "60" : "90"} // Increased from 45/60 to 60/90
+              style={{ objectFit: "contain" }}
+            />
+          </Box>
+
+          {/* Right side: Language Toggle */}
+          <ButtonGroup
+            variant="outlined"
+            size="small"
+            sx={{
+              "& .MuiButton-root": {
+                minWidth: "40px",
+                padding: "6px 12px",
+                fontSize: "0.875rem",
+                fontWeight: "bold",
+                border: `1px solid ${DARK_BLUE}`,
+                color: DARK_BLUE,
+                backgroundColor: WHITE,
+                "&:hover": {
+                  backgroundColor: DARK_BLUE,
+                  color: WHITE,
+                },
+              },
+              "& .MuiButton-root.active": {
+                backgroundColor: DARK_BLUE,
+                color: WHITE,
+                "&:hover": {
+                  backgroundColor: DARK_BLUE,
+                },
+              },
+            }}
+          >
+            <Button
+              className={currentLanguage === "en" ? "active" : ""}
+              onClick={() => currentLanguage !== "en" && toggleLanguage()}
+            >
+              EN
+            </Button>
+            <Button
+              className={currentLanguage === "es" ? "active" : ""}
+              onClick={() => currentLanguage !== "es" && toggleLanguage()}
+            >
+              ES
+            </Button>
+          </ButtonGroup>
+        </Box>
+
+        {/* Center Row: Bloodline Title */}
+        <Box sx={{ textAlign: "center", mb: { xs: 1, sm: 1.5 } }}>
+          <Typography
+            variant={isSmallScreen ? "h4" : "h3"}
+            sx={{
+              color: DARK_BLUE,
+              fontWeight: "bold",
+              fontSize: isSmallScreen ? "2rem" : "2.5rem",
+            }}
+          >
+            Bloodline
+          </Typography>
+        </Box>
+      </Box>
+
+      {/* Subtitle */}
+      <Box sx={{ textAlign: "center", mb: { xs: 2, sm: 3 } }}>
+        <Typography
+          variant="body1"
+          sx={{
+            color: "#666",
+            fontSize: { xs: "1rem", sm: "1.1rem" },
+          }}
+        >
+          Learn about the blood supply, eligibility, and how you can save lives.
+        </Typography>
+      </Box>
+
+      {/* Messages Area - Proper height calculation */}
       <Box
         sx={{
           flex: 1,
-          overflow: "auto",
-          padding: "1rem",
           display: "flex",
           flexDirection: "column",
+          overflow: messages.length > 0 ? "auto" : "hidden", // Only allow scroll when there are messages
+          minHeight: 0,
         }}
       >
-        {/* Welcome Message and FAQs */}
-        {messages.length === 0 && (
-          <Box sx={{ maxWidth: "800px", margin: "0 auto", width: "100%" }}>
-            {/* Welcome Section */}
-            <Box
-              sx={{
-                textAlign: "center",
-                mb: 4,
-                mt: 2,
-              }}
-            >
-              <Typography
-                variant="h4"
-                sx={{
-                  color: PRIMARY_MAIN,
-                  fontWeight: "bold",
-                  mb: 2,
-                  fontSize: { xs: "1.5rem", md: "2rem" },
-                }}
-              >
-                Bloodline
-              </Typography>
-              <Typography
-                variant="body1"
-                sx={{
-                  color: "#666",
-                  mb: 4,
-                  fontSize: "1.1rem",
-                }}
-              >
-                Learn about the blood supply, eligibility, and how you can save lives.
-              </Typography>
-            </Box>
-
-            {/* FAQ Examples */}
-            <FAQExamples 
-              currentLanguage={currentLanguage}
-              onFAQClick={handleFAQClick}
-            />
-          </Box>
-        )}
-
-        {/* Chat Messages */}
-        {messages.map((message, index) => (
-          <Box key={index} sx={{ mb: 2, maxWidth: "800px", margin: "0 auto", width: "100%" }}>
-            {message.type === "user" ? (
-              <UserReply message={message.content} />
-            ) : (
-              <BotReply 
-                message={message.content} 
-                sources={message.sources}
+        {/* Content Container */}
+        <Box
+          sx={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            maxWidth: "1200px",
+            margin: "0 auto",
+            width: "100%",
+            padding: { xs: "0.75rem", sm: "1rem", md: "1.5rem 2rem" }, // More responsive padding
+            paddingBottom: 0, // Remove bottom padding to save space
+          }}
+        >
+          {/* Show FAQ Examples only when no messages - Fit to viewport */}
+          {messages.length === 0 && (
+            <Box sx={{ 
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "flex-start", // Changed from center to flex-start
+              alignItems: "center",
+              minHeight: 0, // Allow shrinking
+              maxHeight: "100%", // Don't exceed container
+              paddingTop: { xs: "2rem", sm: "3rem", md: "4rem" }, // Add generous top padding
+            }}>
+              <FAQExamples 
                 currentLanguage={currentLanguage}
+                onFAQClick={handleFAQClick}
               />
-            )}
-          </Box>
-        ))}
+            </Box>
+          )}
 
-        {/* Loading Indicator */}
-        {isLoading && (
-          <Box sx={{ display: "flex", justifyContent: "center", my: 2 }}>
-            <CircularProgress size={24} sx={{ color: PRIMARY_MAIN }} />
-          </Box>
-        )}
+          {/* Chat Messages - Only show when there are messages */}
+          {messages.length > 0 && (
+            <Box sx={{ flex: 1, display: "flex", flexDirection: "column", paddingBottom: "1rem" }}>
+              {messages.map((message, index) => (
+                <Box key={index} sx={{ mb: 2 }}>
+                  {message.type === "user" ? (
+                    <UserReply message={message.content} />
+                  ) : (
+                    <BotReply 
+                      message={message.content} 
+                      sources={message.sources}
+                      currentLanguage={currentLanguage}
+                    />
+                  )}
+                </Box>
+              ))}
 
-        <div ref={messagesEndRef} />
+              {/* Loading Indicator */}
+              {isLoading && (
+                <Box sx={{ display: "flex", justifyContent: "center", my: 2 }}>
+                  <CircularProgress size={24} sx={{ color: PRIMARY_MAIN }} />
+                </Box>
+              )}
+
+              <div ref={messagesEndRef} />
+            </Box>
+          )}
+        </Box>
       </Box>
 
-      {/* Input Area */}
+      {/* Input Area - Seamlessly integrated */}
       <Box
         sx={{
-          padding: "1rem",
-          backgroundColor: WHITE,
-          borderTop: "1px solid #E0E0E0",
+          backgroundColor: LIGHT_BACKGROUND, // Same as ChatBody background
+          padding: { xs: "0.75rem", sm: "1rem", md: "1.5rem 2rem" }, // More responsive padding
+          paddingTop: messages.length === 0 ? { xs: "0.5rem", sm: "0.75rem", md: "1rem" } : { xs: "1rem", sm: "1.5rem", md: "2rem" }, // Responsive dynamic padding
+          flexShrink: 0, // Don't shrink the input area
         }}
       >
-        <Box sx={{ maxWidth: "800px", margin: "0 auto" }}>
-          <Box sx={{ display: "flex", gap: 1, alignItems: "flex-end" }}>
-            <TextField
-              fullWidth
-              multiline
-              maxRows={4}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder={TEXT.CHAT_PLACEHOLDER}
-              variant="outlined"
-              disabled={isLoading}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "20px",
-                  backgroundColor: LIGHT_BACKGROUND,
+        <Box sx={{ 
+          maxWidth: "1200px", 
+          margin: "0 auto",
+          position: "relative",
+        }}>
+          <TextField
+            fullWidth
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown} // Use onKeyDown instead of deprecated onKeyPress
+            placeholder={TEXT.CHAT_PLACEHOLDER}
+            variant="outlined"
+            disabled={isLoading}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: "25px",
+                backgroundColor: WHITE,
+                border: "1px solid #E0E0E0",
+                paddingRight: { xs: "50px", sm: "60px" }, // Responsive padding for send button
+                "& fieldset": {
+                  border: "none",
                 },
-              }}
-            />
-            <IconButton
-              onClick={handleSendMessage}
-              disabled={!inputValue.trim() || isLoading}
-              sx={{
-                backgroundColor: PRIMARY_MAIN,
-                color: WHITE,
-                width: "48px",
-                height: "48px",
                 "&:hover": {
-                  backgroundColor: PRIMARY_MAIN,
-                  opacity: 0.8,
+                  backgroundColor: WHITE,
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
                 },
-                "&:disabled": {
-                  backgroundColor: "#ccc",
-                  color: "#666",
+                "&.Mui-focused": {
+                  backgroundColor: WHITE,
+                  boxShadow: `0 0 0 2px ${PRIMARY_MAIN}20, 0 2px 8px rgba(0,0,0,0.1)`,
                 },
-              }}
-            >
-              <SendIcon />
-            </IconButton>
-          </Box>
+              },
+              "& .MuiOutlinedInput-input": {
+                padding: { xs: "12px 16px", sm: "14px 20px" }, // Responsive padding
+                fontSize: { xs: "0.9rem", sm: "1rem" }, // Responsive font size
+              },
+            }}
+          />
+          <IconButton
+            onClick={() => handleSendMessage()}
+            disabled={!inputValue.trim() || isLoading}
+            sx={{
+              backgroundColor: PRIMARY_MAIN,
+              color: WHITE,
+              width: { xs: "40px", sm: "44px" }, // Responsive size
+              height: { xs: "40px", sm: "44px" }, // Responsive size
+              position: "absolute",
+              right: { xs: "3px", sm: "4px" }, // Responsive positioning
+              top: "50%",
+              transform: "translateY(-50%)",
+              "&:hover": {
+                backgroundColor: PRIMARY_MAIN,
+                opacity: 0.9,
+              },
+              "&:disabled": {
+                backgroundColor: "#E0E0E0",
+                color: "#999",
+              },
+            }}
+          >
+            <SendIcon sx={{ fontSize: { xs: "1rem", sm: "1.2rem" } }} /> {/* Responsive icon size */}
+          </IconButton>
         </Box>
       </Box>
     </Box>

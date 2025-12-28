@@ -1,42 +1,43 @@
-"use client"
-
+import React from "react"
 import { Box, Typography, List, ListItem, ListItemText, useMediaQuery, IconButton } from "@mui/material"
-import { getCurrentText, ABOUT_US_TEXT, FAQ_TEXT, PRIMARY_MAIN } from "../utilities/constants"
-// Material-UI icons
-import ChevronRightIcon from "@mui/icons-material/ChevronRight"
+import { getCurrentText, ABOUT_US_TEXT, FAQ_TEXT, PRIMARY_MAIN, WHITE } from "../utilities/constants"
+import MenuIcon from "@mui/icons-material/Menu"
 import CloseIcon from "@mui/icons-material/Close"
 
-function LeftNav({ showLeftNav, setLeftNav, language = 'en' }) {
-  const TEXT = getCurrentText(language)
+function LeftNav({ showLeftNav, setLeftNav, currentLanguage }) {
   const isSmallScreen = useMediaQuery("(max-width:600px)")
+  const TEXT = getCurrentText(currentLanguage)
 
   return (
     <Box
       sx={{
         height: "100%",
         color: ABOUT_US_TEXT,
-        padding: "2rem 1rem",
+        padding: "1rem", // Reduced top padding
+        paddingTop: "1rem", // Start closer to top
         position: "relative",
         overflow: "auto",
+        backgroundColor: WHITE,
+        borderRight: "1px solid #E0E0E0",
       }}
     >
-      {/* Toggle button with conditional icon - only show on non-small screens */}
+      {/* Toggle button - Show hamburger menu when collapsed, X when expanded */}
       {!isSmallScreen && (
         <IconButton
           sx={{
             position: "absolute",
             right: "5px",
-            top: "10px",
+            top: "5px", // Moved closer to top
             backgroundColor: PRIMARY_MAIN,
-            color: ABOUT_US_TEXT,
+            color: WHITE,
             padding: "5px",
             "&:hover": {
-              backgroundColor: "#A00000",
+              backgroundColor: "#004d85",
             },
           }}
           onClick={() => setLeftNav(!showLeftNav)}
         >
-          {showLeftNav ? <CloseIcon /> : <ChevronRightIcon />}
+          {showLeftNav ? <CloseIcon /> : <MenuIcon />}
         </IconButton>
       )}
 
@@ -46,12 +47,12 @@ function LeftNav({ showLeftNav, setLeftNav, language = 'en' }) {
           sx={{
             position: "absolute",
             right: "5px",
-            top: "10px",
+            top: "5px", // Moved closer to top
             backgroundColor: PRIMARY_MAIN,
-            color: ABOUT_US_TEXT,
+            color: WHITE,
             padding: "5px",
             "&:hover": {
-              backgroundColor: "#A00000",
+              backgroundColor: "#004d85",
             },
           }}
           onClick={() => setLeftNav(false)}
@@ -95,7 +96,7 @@ function LeftNav({ showLeftNav, setLeftNav, language = 'en' }) {
             {TEXT.FAQ_TITLE}
           </Typography>
           <List>
-            {TEXT.FAQS.map((faq, index) => (
+            {TEXT.FAQS && TEXT.FAQS.map((faq, index) => (
               <ListItem key={index} sx={{ padding: "0.25rem 0" }}>
                 <ListItemText
                   primary={faq}

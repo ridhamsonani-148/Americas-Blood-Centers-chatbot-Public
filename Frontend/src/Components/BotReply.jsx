@@ -4,24 +4,24 @@ import {
   Typography, 
   Avatar, 
   Link,
-  Chip,
-  Paper
+  Button
 } from "@mui/material"
 import { OpenInNew as OpenInNewIcon } from "@mui/icons-material"
 import { 
-  BOTMESSAGE_BACKGROUND, 
   PRIMARY_MAIN,
-  SECONDARY_MAIN
+  SECONDARY_MAIN,
+  WHITE,
+  LIGHT_BACKGROUND
 } from "../utilities/constants"
 
 function BotReply({ message, sources = [], currentLanguage }) {
   return (
-    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 2 }}>
+    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 3 }}>
       {/* Bot Avatar */}
       <Avatar
         sx={{
-          width: 40,
-          height: 40,
+          width: 36,
+          height: 36,
           backgroundColor: PRIMARY_MAIN,
           flexShrink: 0,
         }}
@@ -30,99 +30,130 @@ function BotReply({ message, sources = [], currentLanguage }) {
           src="/logo.png" 
           alt="America's Blood Centers Logo" 
           style={{ 
-            width: "24px", 
-            height: "24px",
+            width: "20px", 
+            height: "20px",
             objectFit: "contain"
           }} 
         />
       </Avatar>
 
-      {/* Message Content */}
-      <Box sx={{ flex: 1, maxWidth: "calc(100% - 50px)" }}>
+      {/* Message Content with Blue Left Border */}
+      <Box 
+        sx={{ 
+          flex: 1, 
+          maxWidth: "calc(100% - 50px)",
+          borderLeft: `4px solid ${PRIMARY_MAIN}`,
+          paddingLeft: "1rem",
+          backgroundColor: LIGHT_BACKGROUND,
+          borderRadius: "0 8px 8px 0",
+          padding: "1rem",
+          marginLeft: "0.5rem",
+        }}
+      >
         {/* Message Text */}
-        <Paper
-          elevation={1}
+        <Typography
+          variant="body1"
           sx={{
-            padding: "1rem",
-            backgroundColor: BOTMESSAGE_BACKGROUND,
-            borderRadius: "1rem 1rem 1rem 0.25rem",
-            mb: sources.length > 0 ? 1 : 0,
+            lineHeight: 1.6,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            color: "#333",
+            mb: sources.length > 0 ? 2 : 0,
           }}
         >
-          <Typography
-            variant="body1"
+          {message}
+        </Typography>
+
+        {/* Learn More Button (if it's a structured response) */}
+        {message.includes("eligibility") || message.includes("requirements") ? (
+          <Button
+            variant="contained"
+            size="small"
             sx={{
-              lineHeight: 1.6,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
+              backgroundColor: "#DC3545",
+              color: WHITE,
+              borderRadius: "4px",
+              textTransform: "none",
+              fontSize: "0.8rem",
+              mb: sources.length > 0 ? 2 : 0,
+              "&:hover": {
+                backgroundColor: "#C82333",
+              },
             }}
           >
-            {message}
-          </Typography>
-        </Paper>
+            Learn More →
+          </Button>
+        ) : null}
 
         {/* Sources */}
         {sources && sources.length > 0 && (
-          <Box sx={{ mt: 1 }}>
-            <Typography
-              variant="caption"
-              sx={{
-                color: "#666",
-                mb: 1,
-                display: "block",
-                fontWeight: "medium",
-              }}
-            >
-              {currentLanguage === "es" ? "Fuentes:" : "Sources:"}
-            </Typography>
+          <Box>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "#666",
+                  fontWeight: "medium",
+                  fontSize: "0.85rem",
+                }}
+              >
+                📄 {currentLanguage === "es" ? "Fuente" : "Source"}
+              </Typography>
+            </Box>
+            
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-              {sources.slice(0, 5).map((source, index) => (
-                <Chip
-                  key={index}
-                  label={
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                      <Typography variant="caption" sx={{ fontSize: "0.75rem" }}>
-                        {source.title || `Source ${index + 1}`}
-                      </Typography>
-                      <OpenInNewIcon sx={{ fontSize: "0.7rem" }} />
-                    </Box>
-                  }
-                  component={Link}
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  clickable
-                  size="small"
-                  variant="outlined"
-                  sx={{
-                    borderColor: SECONDARY_MAIN,
-                    color: SECONDARY_MAIN,
-                    fontSize: "0.7rem",
-                    height: "24px",
-                    textDecoration: "none",
-                    "&:hover": {
+              {sources.slice(0, 3).map((source, index) => (
+                <Box key={index}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "#666",
+                      fontSize: "0.8rem",
+                      mb: 0.5,
+                    }}
+                  >
+                    {source.title || `Source ${index + 1}`}
+                  </Typography>
+                  <Button
+                    component={Link}
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    variant="outlined"
+                    size="small"
+                    endIcon={<OpenInNewIcon sx={{ fontSize: "0.8rem" }} />}
+                    sx={{
                       borderColor: PRIMARY_MAIN,
                       color: PRIMARY_MAIN,
-                      backgroundColor: "rgba(204, 35, 69, 0.05)",
-                      textDecoration: "none",
-                    },
-                  }}
-                />
+                      fontSize: "0.75rem",
+                      textTransform: "none",
+                      borderRadius: "4px",
+                      "&:hover": {
+                        borderColor: SECONDARY_MAIN,
+                        color: SECONDARY_MAIN,
+                        backgroundColor: "rgba(0, 97, 164, 0.05)",
+                      },
+                    }}
+                  >
+                    Open Source
+                  </Button>
+                </Box>
               ))}
             </Box>
-            {sources.length > 5 && (
+            
+            {sources.length > 3 && (
               <Typography
                 variant="caption"
                 sx={{
                   color: "#666",
-                  mt: 0.5,
+                  mt: 1,
                   display: "block",
-                  fontSize: "0.7rem",
+                  fontSize: "0.75rem",
                 }}
               >
                 {currentLanguage === "es" 
-                  ? `+${sources.length - 5} fuentes más`
-                  : `+${sources.length - 5} more sources`
+                  ? `+${sources.length - 3} fuentes más`
+                  : `+${sources.length - 3} more sources`
                 }
               </Typography>
             )}
