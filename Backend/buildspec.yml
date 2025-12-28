@@ -767,9 +767,16 @@ phases:
           else
             echo "Creating new Daily Sync Data Source..."
             
-            # Read daily sync URL
-            DAILY_SYNC_URL=$(aws s3 cp s3://$DOCUMENTS_BUCKET/daily-sync.txt - | head -1)
+            # Read daily sync URL (skip comment lines)
+            DAILY_SYNC_URL=$(aws s3 cp s3://$DOCUMENTS_BUCKET/daily-sync.txt - | grep -v '^#' | grep -v '^$' | head -1)
             echo "Daily sync URL: $DAILY_SYNC_URL"
+            
+            # Validate URL
+            if [[ ! "$DAILY_SYNC_URL" =~ ^https?:// ]]; then
+              echo "Error: Invalid daily sync URL: $DAILY_SYNC_URL"
+              echo "Please ensure daily-sync.txt contains a valid URL (not a comment)"
+              exit 1
+            fi
             
             DAILY_DS_ID=$(aws bedrock-agent create-data-source \
               --knowledge-base-id "$KB_ID" \
