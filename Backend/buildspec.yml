@@ -721,8 +721,6 @@ phases:
                       ".*/wp-admin/.*", 
                       ".*/login/.*", 
                       ".*/admin/.*"
-                    ],
-                    "inclusionFilters": [
                     ]
                   }
                 }
