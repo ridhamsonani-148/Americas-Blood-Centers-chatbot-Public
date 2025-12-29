@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react"
+import { useState, useEffect } from "react"
 import { ThemeProvider } from "@mui/material/styles"
 import { CssBaseline, Box, useMediaQuery, Drawer, IconButton } from "@mui/material"
 import { Menu as MenuIcon } from "@mui/icons-material"
@@ -28,14 +28,14 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
+      <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
         {/* Main Content Area - No AppHeader */}
         <Box
           sx={{
-            height: "100vh", // Full viewport height
+            minHeight: "100vh", // Use minimum height instead of fixed height
             display: "flex",
             position: "relative",
-            overflow: "hidden",
+            // Remove overflow hidden to allow natural page scroll
           }}
         >
           {/* Mobile Drawer */}
@@ -110,11 +110,11 @@ function App() {
           <Box
             sx={{
               flexGrow: 1,
-              height: "100%",
+              minHeight: "100vh", // Use minimum height
               backgroundColor: LIGHT_BACKGROUND,
               display: "flex",
               flexDirection: "column",
-              overflow: "hidden",
+              // Remove overflow hidden to allow natural scroll
               position: "relative",
             }}
           >

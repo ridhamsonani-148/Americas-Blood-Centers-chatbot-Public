@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect } from "react"
 import { 
   Box, 
   TextField, 
@@ -30,7 +30,11 @@ function ChatBody({ currentLanguage, toggleLanguage, showLeftNav, setLeftNav }) 
   const TEXT = getCurrentText(currentLanguage)
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    // Use native page scroll instead of internal container scroll
+    window.scrollTo({ 
+      top: document.body.scrollHeight, 
+      behavior: "smooth" 
+    })
   }
 
   useEffect(() => {
@@ -98,11 +102,11 @@ function ChatBody({ currentLanguage, toggleLanguage, showLeftNav, setLeftNav }) 
   return (
     <Box
       sx={{
-        height: "100%",
+        minHeight: "100vh", // Use full viewport height
         display: "flex",
         flexDirection: "column",
         backgroundColor: LIGHT_BACKGROUND,
-        overflow: "hidden", // Prevent scrollbar on main container
+        // Remove overflow hidden to allow natural page scroll
       }}
     >
       {/* Integrated Header with Logo and Language Toggle */}
@@ -187,70 +191,70 @@ function ChatBody({ currentLanguage, toggleLanguage, showLeftNav, setLeftNav }) 
             </Button>
           </ButtonGroup>
         </Box>
-
-        {/* Center Row: Bloodline Title */}
-        <Box sx={{ textAlign: "center", mb: { xs: 1, sm: 1.5 } }}>
-          <Typography
-            variant={isSmallScreen ? "h4" : "h3"}
-            sx={{
-              color: DARK_BLUE,
-              fontWeight: "bold",
-              fontSize: isSmallScreen ? "2rem" : "2.5rem",
-            }}
-          >
-            Bloodline
-          </Typography>
-        </Box>
       </Box>
 
-      {/* Subtitle */}
-      <Box sx={{ textAlign: "center", mb: { xs: 2, sm: 3 } }}>
-        <Typography
-          variant="body1"
-          sx={{
-            color: "#666",
-            fontSize: { xs: "1rem", sm: "1.1rem" },
-          }}
-        >
-          Learn about the blood supply, eligibility, and how you can save lives.
-        </Typography>
-      </Box>
-
-      {/* Messages Area - Proper height calculation */}
+      {/* Messages Area - Use full viewport height with native scroll */}
       <Box
         sx={{
           flex: 1,
           display: "flex",
           flexDirection: "column",
-          overflow: messages.length > 0 ? "auto" : "hidden", // Only allow scroll when there are messages
           minHeight: 0,
+          // Remove overflow hidden to use native page scroll
         }}
       >
         {/* Content Container */}
         <Box
           sx={{
             flex: 1,
-            display: "flex",
-            flexDirection: "column",
             maxWidth: "1200px",
             margin: "0 auto",
             width: "100%",
-            padding: { xs: "0.75rem", sm: "1rem", md: "1.5rem 2rem" }, // More responsive padding
-            paddingBottom: 0, // Remove bottom padding to save space
+            // padding: { xs: "0.75rem", sm: "1rem", md: "1.5rem 2rem" },
+            padding: { xs: "0 rem", sm: "0rem", md: "0rem 0rem" },
+            paddingBottom: 0,
           }}
         >
-          {/* Show FAQ Examples only when no messages - Fit to viewport */}
+          {/* Show Welcome Content only when no messages */}
           {messages.length === 0 && (
             <Box sx={{ 
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "flex-start", // Changed from center to flex-start
-              alignItems: "center",
-              minHeight: 0, // Allow shrinking
-              maxHeight: "100%", // Don't exceed container
-              paddingTop: { xs: "2rem", sm: "3rem", md: "4rem" }, // Add generous top padding
+              paddingTop: { xs: "0rem", sm: "0rem", md: "0rem" }, // Reduced from 2rem/3rem/4rem
             }}>
+              {/* Welcome Title and Subtitle */}
+              <Box sx={{ 
+                textAlign: "center", 
+                mb: { xs: 3, sm: 4, md: 5 },
+                px: { xs: 2, sm: 3, md: 4 } // Match FAQExamples padding
+              }}>
+                <Typography
+                  variant="h2"
+                  sx={{
+                    fontSize: { xs: "2rem", sm: "2.5rem", md: "3rem" },
+                    fontWeight: "bold",
+                    color: DARK_BLUE,
+                    mb: 2,
+                    fontFamily: "'Roboto', sans-serif",
+                  }}
+                >
+                  {currentLanguage === "en" ? "America's Blood Centers" : "Centros de Sangre de América"}
+                </Typography>
+                <Typography
+                  variant="h6"
+                  sx={{
+                    fontSize: { xs: "1rem", sm: "1.1rem", md: "1.25rem" },
+                    color: "#666",
+                    maxWidth: "600px",
+                    margin: "0 auto",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {currentLanguage === "en" 
+                    ? "Learn about the blood supply, eligibility, and how you can save lives."
+                    : "Aprende sobre el suministro de sangre, elegibilidad y cómo puedes salvar vidas."
+                  }
+                </Typography>
+              </Box>
+              
               <FAQExamples 
                 currentLanguage={currentLanguage}
                 onFAQClick={handleFAQClick}
@@ -258,9 +262,9 @@ function ChatBody({ currentLanguage, toggleLanguage, showLeftNav, setLeftNav }) 
             </Box>
           )}
 
-          {/* Chat Messages - Only show when there are messages */}
+          {/* Chat Messages - Simple layout without nested scroll */}
           {messages.length > 0 && (
-            <Box sx={{ flex: 1, display: "flex", flexDirection: "column", paddingBottom: "1rem" }}>
+            <Box sx={{ paddingBottom: "1rem" }}>
               {messages.map((message, index) => (
                 <Box key={index} sx={{ mb: 2 }}>
                   {message.type === "user" ? (

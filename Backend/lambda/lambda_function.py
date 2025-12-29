@@ -100,6 +100,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             }
         
         logger.info(f"Processing chat request: {user_message[:100]}... (language: {language})")
+        logger.info(f"FULL USER QUERY: {user_message}")  # Log complete user query
         
         # Step 1: Retrieve relevant context from Knowledge Base
         logger.info(f"Retrieving context for query: {user_message}...")
@@ -140,6 +141,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Step 2: Generate response using Bedrock LLM
         response_data = generate_response(user_message, context_results, language)
         
+        # Log Claude's complete response for debugging
+        logger.info(f"CLAUDE RESPONSE LENGTH: {len(response_data['response'])} characters")
+        logger.info(f"CLAUDE FULL RESPONSE: {response_data['response']}")
+        
+        # Log model response metadata if available
+        if response_data.get('model_response'):
+            logger.info(f"MODEL METADATA: {json.dumps(response_data['model_response'], indent=2, default=str)}")
+        
         # Step 3: Add blood center link if asking about donation locations
         sources = add_blood_center_link_if_needed(user_message, sources)
         
@@ -159,6 +168,15 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
         
         logger.info(f"Response generated successfully with {len(sources)} sources")
+        
+        # Final summary log for easy tracking
+        logger.info(f"=== CHAT SUMMARY ===")
+        logger.info(f"USER: {user_message}")
+        logger.info(f"LANGUAGE: {language}")
+        logger.info(f"SOURCES COUNT: {len(sources)}")
+        logger.info(f"RESPONSE LENGTH: {len(response_data['response'])} chars")
+        logger.info(f"MODEL: {MODEL_ID}")
+        logger.info(f"=== END SUMMARY ===")
         
         return {
             'statusCode': 200,
@@ -215,8 +233,15 @@ def generate_response(user_message: str, context_results: List[Dict[str, Any]], 
         # Build context from retrieval results
         context_text = build_context_text(context_results)
         
+        # Log the context being used
+        logger.info(f"CONTEXT LENGTH: {len(context_text)} characters")
+        logger.info(f"CONTEXT TEXT: {context_text[:1000]}...")  # First 1000 chars of context
+        
         # Create prompt based on language
         prompt = create_prompt(user_message, context_text, language)
+        
+        # Log the complete prompt sent to Claude
+        logger.info(f"PROMPT SENT TO CLAUDE: {prompt}")
         
         logger.info(f"Generating response using model: {MODEL_ID}")
         
@@ -394,16 +419,58 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
             
             logger.info(f"Extracted source: {source_title} - {accessible_url[:100]}...")
     
-    # Remove duplicates and sort by score
+    # Enhanced deduplication logic - prefer public URLs over S3 presigned URLs
     unique_sources = []
-    seen_urls = set()
+    seen_documents = {}
     
     for source in sorted(sources, key=lambda x: x.get('score', 0), reverse=True):
-        if source['uri'] not in seen_urls:  # Use original URI for deduplication
+        # Create a unique key for the document (filename-based)
+        doc_key = None
+        
+        # Extract filename for deduplication key
+        if 's3://' in source['uri'] or 'amazonaws.com' in source['url']:
+            # S3 document - extract filename
+            if 's3://' in source['uri']:
+                doc_key = source['uri'].split('/')[-1].lower()
+            else:
+                doc_key = source['url'].split('/')[-1].split('?')[0].lower()  # Remove query params
+        else:
+            # Web URL - extract filename from URL
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(source['url'])
+                doc_key = parsed.path.split('/')[-1].lower()
+                if not doc_key or doc_key == '':
+                    # If no filename, use the full path
+                    doc_key = f"{parsed.netloc}{parsed.path}".lower()
+            except:
+                doc_key = source['url'].lower()
+        
+        if doc_key and doc_key not in seen_documents:
             unique_sources.append(source)
-            seen_urls.add(source['uri'])
+            seen_documents[doc_key] = source
+            logger.info(f"Added unique source: {source['title']} (key: {doc_key})")
+        elif doc_key and doc_key in seen_documents:
+            existing_source = seen_documents[doc_key]
+            
+            # Prefer public web URLs over S3 presigned URLs
+            is_current_public = not ('amazonaws.com' in source['url'] or 's3://' in source['uri'])
+            is_existing_s3 = 'amazonaws.com' in existing_source['url'] or 's3://' in existing_source['uri']
+            
+            if is_current_public and is_existing_s3:
+                # Replace S3 URL with public URL
+                for i, us in enumerate(unique_sources):
+                    if us == existing_source:
+                        unique_sources[i] = source
+                        seen_documents[doc_key] = source
+                        logger.info(f"Replaced S3 URL with public URL: {source['title']} (key: {doc_key})")
+                        break
+            else:
+                logger.info(f"Skipped duplicate source: {source['title']} (key: {doc_key})")
+        else:
+            logger.info(f"Skipped source with no valid key: {source['title']}")
     
-    logger.info(f"Final sources count: {len(unique_sources)}")
+    logger.info(f"Final sources count: {len(unique_sources)} (reduced from {len(sources)})")
     return unique_sources
 
 def add_blood_center_link_if_needed(user_message: str, sources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

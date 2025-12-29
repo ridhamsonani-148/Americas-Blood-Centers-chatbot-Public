@@ -52,17 +52,22 @@ function FAQExamples({ currentLanguage, onFAQClick }) {
   ]
 
   return (
-    <Box sx={{ mb: 2, maxWidth: "1200px", mx: "auto" }}>
-      {/* 4 Cards in One Row */}
-      <Grid container spacing={{ xs: 1, sm: 2, md: 2 }}>
+    <Box sx={{ 
+      mb: 2, 
+      maxWidth: "1200px", 
+      mx: "auto",
+      px: { xs: 2, sm: 3, md: 4 } // Add horizontal padding for all screen sizes
+    }}>
+      {/* 4 Cards - Responsive Layout */}
+      <Grid container spacing={{ xs: 1.5, sm: 2, md: 2 }}>
         {faqItems.map((item, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
+          <Grid item xs={6} sm={6} md={3} key={index}>
             <Button
               onClick={() => onFAQClick(item.question)}
               sx={{
                 width: "100%",
-                height: { xs: "140px", sm: "150px", md: "160px" }, // Reduced height (was 160/170/180)
-                padding: { xs: "0.6rem", sm: "0.8rem", md: "0.9rem" }, // Reduced padding
+                height: { xs: "120px", sm: "150px", md: "160px" }, // Shorter on mobile
+                padding: { xs: "0.5rem", sm: "0.8rem", md: "0.9rem" },
                 backgroundColor: WHITE,
                 border: "1px solid #E0E0E0",
                 borderRadius: "8px",
@@ -70,7 +75,7 @@ function FAQExamples({ currentLanguage, onFAQClick }) {
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "flex-start",
-                gap: { xs: 0.4, sm: 0.6, md: 0.8 }, // Reduced gap
+                gap: { xs: 0.3, sm: 0.6, md: 0.8 },
                 textTransform: "none",
                 color: "inherit",
                 boxShadow: "0 2px 4px rgba(0,0,0,0.1)",

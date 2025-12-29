@@ -60,6 +60,79 @@ function BotReply({ message, sources = [], currentLanguage }) {
     }
   }
   
+  // Function to parse message and render clickable "Learn More" links
+  const renderMessageWithLinks = (text) => {
+    // Enhanced pattern to catch various "Learn More" formats
+    const learnMorePattern = /(Learn More\s*[→\-–—>]*|Más información\s*[→\-–—>]*|Learn more\s*[→\-–—>]*)/gi;
+    const parts = text.split(learnMorePattern);
+    
+    return parts.map((part, index) => {
+      // Check if this part is a "Learn More" text
+      if (learnMorePattern.test(part)) {
+        // Only show button if we have relevant sources
+        if (!sources || sources.length === 0) {
+          // If no sources, just return the text as-is
+          return part;
+        }
+        
+        return (
+          <Button
+            key={index}
+            variant="contained"
+            size="small"
+            onClick={() => {
+              // Only use sources that Claude provided for this specific response
+              let targetUrl = null;
+              
+              if (sources && sources.length > 0) {
+                // Priority 1: Look for eligibility-specific sources
+                const eligibilitySource = sources.find(source => 
+                  source.url.toLowerCase().includes('eligibility') || 
+                  source.url.toLowerCase().includes('requirements') ||
+                  source.title.toLowerCase().includes('eligibility') ||
+                  source.title.toLowerCase().includes('requirements')
+                );
+                
+                // Priority 2: Look for donation-related sources
+                const donationSource = sources.find(source =>
+                  source.url.toLowerCase().includes('donate') ||
+                  source.url.toLowerCase().includes('donation') ||
+                  source.title.toLowerCase().includes('donation')
+                );
+                
+                // Priority 3: Use the first (highest scored) source
+                const bestSource = eligibilitySource || donationSource || sources[0];
+                targetUrl = bestSource.url;
+              }
+              
+              // Only open if we have a relevant source from Claude's response
+              if (targetUrl) {
+                window.open(targetUrl, '_blank', 'noopener,noreferrer');
+              }
+            }}
+            sx={{
+              backgroundColor: "#DC3545",
+              color: WHITE,
+              borderRadius: "4px",
+              textTransform: "none",
+              fontSize: "0.8rem",
+              mx: 0.5,
+              cursor: "pointer",
+              "&:hover": {
+                backgroundColor: "#C82333",
+              },
+            }}
+          >
+            {currentLanguage === 'es' ? 'Más información →' : 'Learn More →'}
+          </Button>
+        );
+      } else {
+        // Regular text part
+        return part;
+      }
+    });
+  };
+
   const displayedSources = showAllSources ? sources : sources.slice(0, 3)
   const remainingSources = sources.length - 3
   return (
@@ -97,7 +170,7 @@ function BotReply({ message, sources = [], currentLanguage }) {
           marginLeft: "0.5rem",
         }}
       >
-        {/* Message Text */}
+        {/* Message Text with Clickable Learn More Links */}
         <Typography
           variant="body1"
           sx={{
@@ -108,7 +181,7 @@ function BotReply({ message, sources = [], currentLanguage }) {
             mb: sources.length > 0 ? 2 : 0,
           }}
         >
-          {message}
+          {renderMessageWithLinks(message)}
         </Typography>
 
         {/* Learn More Button (if it's a structured response) */}
