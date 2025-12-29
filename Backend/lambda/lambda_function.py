@@ -167,6 +167,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             }
         }
         
+        # Log what's actually being sent to frontend
+        logger.info(f"FINAL RESPONSE TO FRONTEND: {chat_response['message']}")
+        
         logger.info(f"Response generated successfully with {len(sources)} sources")
         
         # Final summary log for easy tracking
