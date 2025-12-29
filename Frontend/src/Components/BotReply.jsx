@@ -111,27 +111,6 @@ function BotReply({ message, sources = [], currentLanguage }) {
           {message}
         </Typography>
 
-        {/* Learn More Button (if it's a structured response) */}
-        {message.includes("eligibility") || message.includes("requirements") ? (
-          <Button
-            variant="contained"
-            size="small"
-            sx={{
-              backgroundColor: "#DC3545",
-              color: WHITE,
-              borderRadius: "4px",
-              textTransform: "none",
-              fontSize: "0.8rem",
-              mb: sources.length > 0 ? 2 : 0,
-              "&:hover": {
-                backgroundColor: "#C82333",
-              },
-            }}
-          >
-            Learn More →
-          </Button>
-        ) : null}
-
         {/* Sources */}
         {sources && sources.length > 0 && (
           <Box>
