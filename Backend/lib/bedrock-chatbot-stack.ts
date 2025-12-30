@@ -399,12 +399,6 @@ export class BedrockChatbotStack extends cdk.Stack {
         type: "VECTOR",
         vectorKnowledgeBaseConfiguration: {
           embeddingModelArn: embeddingModelArn,
-          embeddingModelConfiguration: {
-            bedrockEmbeddingModelConfiguration: {
-              dimensions: 1536, // Amazon Titan Text Embeddings v1 dimension
-              embeddingDataType: "FLOAT32",
-            },
-          },
           // Supplemental data storage for multimodal content (images extracted from documents)
           supplementalDataStorageConfiguration: {
             supplementalDataStorageLocations: [
