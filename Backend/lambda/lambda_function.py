@@ -6,6 +6,7 @@ Lambda function for handling chat requests using Bedrock Knowledge Base and Foun
 import json
 import logging
 import os
+import re
 from typing import Dict, Any, List
 import boto3
 from botocore.exceptions import ClientError
@@ -149,26 +150,30 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if response_data.get('model_response'):
             logger.info(f"MODEL METADATA: {json.dumps(response_data['model_response'], indent=2, default=str)}")
         
-        # Step 3: Add blood center link if asking about donation locations
+        # Step 3: Process response for markdown formatting
+        processed_response = process_markdown_response(response_data['response'])
+        
+        # Step 4: Add blood center link if asking about donation locations
         sources = add_blood_center_link_if_needed(user_message, sources)
         
         # Prepare final response
         chat_response = {
             "success": True,
-            "message": response_data['response'],
+            "message": processed_response,
             "sources": sources,
             "timestamp": datetime.utcnow().isoformat(),
             "metadata": {
                 "sourceCount": len(sources),
-                "responseLength": len(response_data['response']),
+                "responseLength": len(processed_response),
                 "model": MODEL_ID,
                 "language": language,
-                "retrievalResults": len(context_results)
+                "retrievalResults": len(context_results),
+                "hasMarkdown": has_markdown_formatting(processed_response)
             }
         }
         
         # Log what's actually being sent to frontend
-        logger.info(f"FINAL RESPONSE TO FRONTEND: {chat_response['message']}")
+        logger.info(f"FINAL RESPONSE TO FRONTEND: {processed_response}")
         
         logger.info(f"Response generated successfully with {len(sources)} sources")
         
@@ -177,7 +182,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         logger.info(f"USER: {user_message}")
         logger.info(f"LANGUAGE: {language}")
         logger.info(f"SOURCES COUNT: {len(sources)}")
-        logger.info(f"RESPONSE LENGTH: {len(response_data['response'])} chars")
+        logger.info(f"RESPONSE LENGTH: {len(processed_response)} chars")
         logger.info(f"MODEL: {MODEL_ID}")
         logger.info(f"=== END SUMMARY ===")
         
@@ -333,6 +338,8 @@ Instrucciones:
 - Si la pregunta es sobre ubicaciones de donación, menciona el localizador de centros de sangre
 - Sé preciso y útil
 - Si no tienes información suficiente en el contexto, dilo claramente
+- Usa formato markdown cuando sea apropiado (listas, texto en negrita, etc.)
+- Organiza la información de manera clara y fácil de leer
 
 Respuesta:"""
     else:
@@ -349,6 +356,8 @@ Instructions:
 - Be accurate and helpful
 - If you don't have sufficient information in the context, say so clearly
 - Focus on blood donation, eligibility, and America's Blood Centers information
+- Use markdown formatting when appropriate (lists, bold text, etc.)
+- Organize information clearly and make it easy to read
 
 Answer:"""
 
@@ -512,3 +521,50 @@ def get_fallback_response(language: str) -> str:
         return "Lo siento, tengo problemas para responder en este momento. Por favor, inténtalo de nuevo más tarde o contacta directamente a America's Blood Centers."
     else:
         return "I'm sorry, I'm having trouble responding right now. Please try again later or contact America's Blood Centers directly."
+
+def process_markdown_response(response: str) -> str:
+    """
+    Process the response to ensure proper markdown formatting for the frontend
+    """
+    if not response:
+        return response
+    
+    # Clean up any existing markdown formatting issues
+    processed = response.strip()
+    
+    # Ensure proper line breaks for lists
+    processed = re.sub(r'\n(\d+\.)', r'\n\n\1', processed)  # Numbered lists
+    processed = re.sub(r'\n(\*|\-)', r'\n\n\1', processed)  # Bullet lists
+    
+    # Ensure proper spacing around headers
+    processed = re.sub(r'\n(#{1,6}\s)', r'\n\n\1', processed)
+    
+    # Clean up multiple consecutive newlines (max 2)
+    processed = re.sub(r'\n{3,}', '\n\n', processed)
+    
+    # Ensure bold text is properly formatted
+    processed = re.sub(r'\*\*([^*]+)\*\*', r'**\1**', processed)
+    
+    return processed.strip()
+
+def has_markdown_formatting(text: str) -> bool:
+    """
+    Check if the text contains markdown formatting
+    """
+    if not text:
+        return False
+    
+    markdown_patterns = [
+        r'\*\*[^*]+\*\*',  # Bold text
+        r'\*[^*]+\*',      # Italic text
+        r'^#{1,6}\s',      # Headers
+        r'^\d+\.\s',       # Numbered lists
+        r'^[\*\-]\s',      # Bullet lists
+        r'\[([^\]]+)\]\(([^)]+)\)',  # Links
+    ]
+    
+    for pattern in markdown_patterns:
+        if re.search(pattern, text, re.MULTILINE):
+            return True
+    
+    return False
