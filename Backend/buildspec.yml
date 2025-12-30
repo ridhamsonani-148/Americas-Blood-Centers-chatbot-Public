@@ -120,6 +120,189 @@ phases:
           echo "✓ Web Crawler ingestion job started: $WEB_INGESTION_JOB_ID"
           
           echo ""
+          echo "=== Amplify App Setup ==="
+          
+          # Set up Amplify app name
+          AMPLIFY_APP_NAME="${PROJECT_NAME}-chatbot"
+          AMPLIFY_BRANCH_NAME="main"
+          
+          echo "Creating/updating Amplify app..."
+          echo "App name: $AMPLIFY_APP_NAME"
+          
+          # First, try to find existing app
+          AMPLIFY_APP_ID=$(aws amplify list-apps \
+            --query "apps[?name=='$AMPLIFY_APP_NAME'].appId" \
+            --output text)
+          
+          if [ -z "$AMPLIFY_APP_ID" ] || [ "$AMPLIFY_APP_ID" = "None" ]; then
+            echo "No existing app found, creating new Amplify app..."
+            AMPLIFY_APP_ID=$(aws amplify create-app \
+              --name "$AMPLIFY_APP_NAME" \
+              --platform WEB \
+              --environment-variables "REACT_APP_API_BASE_URL=$API_URL,REACT_APP_CHAT_ENDPOINT=$API_URL,REACT_APP_HEALTH_ENDPOINT=$API_URL" \
+              --query 'app.appId' \
+              --output text)
+          else
+            echo "Found existing app with ID: $AMPLIFY_APP_ID"
+            # Update environment variables for existing app
+            aws amplify update-app \
+              --app-id "$AMPLIFY_APP_ID" \
+              --environment-variables "REACT_APP_API_BASE_URL=$API_URL,REACT_APP_CHAT_ENDPOINT=$API_URL,REACT_APP_HEALTH_ENDPOINT=$API_URL"
+          fi
+          
+          echo "Final Amplify App ID: $AMPLIFY_APP_ID"
+          
+          if [ -z "$AMPLIFY_APP_ID" ] || [ "$AMPLIFY_APP_ID" = "None" ]; then
+            echo "❌ ERROR: Failed to create or find Amplify app"
+            exit 1
+          fi
+          
+          # Create branch if it doesn't exist
+          aws amplify create-branch \
+            --app-id "$AMPLIFY_APP_ID" \
+            --branch-name "$AMPLIFY_BRANCH_NAME" \
+            --stage PRODUCTION \
+            --environment-variables "REACT_APP_API_BASE_URL=$API_URL,REACT_APP_CHAT_ENDPOINT=$API_URL,REACT_APP_HEALTH_ENDPOINT=$API_URL" \
+            --no-cli-pager 2>/dev/null || echo "Branch already exists"
+          
+          # Update AmplifyDeployer Lambda with app details
+          AMPLIFY_DEPLOYER_FUNCTION_NAME=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.AmplifyDeployerFunctionName // empty')
+          
+          if [ -n "$AMPLIFY_DEPLOYER_FUNCTION_NAME" ] && [ "$AMPLIFY_DEPLOYER_FUNCTION_NAME" != "empty" ]; then
+            aws lambda update-function-configuration \
+              --function-name "$AMPLIFY_DEPLOYER_FUNCTION_NAME" \
+              --environment "Variables={AMPLIFY_APP_ID=$AMPLIFY_APP_ID,AMPLIFY_BRANCH_NAME=$AMPLIFY_BRANCH_NAME}" \
+              --region "$CDK_DEFAULT_REGION"
+            echo "✓ AmplifyDeployer Lambda updated"
+          fi
+          
+          echo ""
+          echo "=== Frontend Build and Automated Deployment ==="
+          
+          # Check if Frontend directory exists
+          if [ -d "../Frontend" ]; then
+            cd ../Frontend
+            
+            # Set up environment variables
+            export PUBLIC_URL=""
+            export GENERATE_SOURCEMAP=false
+            echo "REACT_APP_API_BASE_URL=$API_URL" > .env.production
+            echo "REACT_APP_CHAT_ENDPOINT=$API_URL" >> .env.production
+            echo "REACT_APP_HEALTH_ENDPOINT=$API_URL" >> .env.production
+            echo "PUBLIC_URL=" >> .env.production
+            echo "GENERATE_SOURCEMAP=false" >> .env.production
+            
+            # Clean and build
+            rm -rf build/ node_modules/.cache/
+            npm install
+            npm run build
+            
+            if [ ! -f "build/index.html" ]; then
+              echo "❌ ERROR: Build failed - index.html not found!"
+              exit 1
+            fi
+            
+            if grep -q "%PUBLIC_URL%" build/index.html; then
+              echo "❌ ERROR: Build incomplete - %PUBLIC_URL% not replaced!"
+              exit 1
+            fi
+            
+            echo "✅ Build successful"
+            
+            # Create deployment package
+            cd build
+            zip -r ../build.zip . -x "*.DS_Store" "*.map"
+            cd ..
+            
+            # Upload to builds bucket
+            BUILD_KEY="builds/build-$(date +%s).zip"
+            BUILDS_BUCKET=$(cat ../Backend/outputs.json | jq -r '.AmericasBloodCentersBedrockStack.BuildsBucketName // empty')
+            
+            if [ -n "$BUILDS_BUCKET" ] && [ "$BUILDS_BUCKET" != "empty" ]; then
+              aws s3 cp build.zip "s3://$BUILDS_BUCKET/$BUILD_KEY"
+              echo "✅ Build artifact uploaded to S3: $BUILD_KEY"
+              
+              # Trigger deployment via AmplifyDeployer Lambda if available
+              if [ -n "$AMPLIFY_DEPLOYER_FUNCTION_NAME" ] && [ "$AMPLIFY_DEPLOYER_FUNCTION_NAME" != "empty" ]; then
+                DEPLOY_PAYLOAD='{"bucket":"'$BUILDS_BUCKET'","key":"'$BUILD_KEY'"}'
+                aws lambda invoke \
+                  --function-name "$AMPLIFY_DEPLOYER_FUNCTION_NAME" \
+                  --payload "$DEPLOY_PAYLOAD" \
+                  --cli-binary-format raw-in-base64-out \
+                  --region "$CDK_DEFAULT_REGION" \
+                  /tmp/deploy_response.json
+                echo "✅ Deployment triggered via Lambda"
+              else
+                # Fallback: Direct Amplify deployment
+                aws amplify start-deployment \
+                  --app-id "$AMPLIFY_APP_ID" \
+                  --branch-name "$AMPLIFY_BRANCH_NAME" \
+                  --source-url "s3://$BUILDS_BUCKET/$BUILD_KEY" \
+                  --region "$CDK_DEFAULT_REGION"
+                echo "✅ Direct Amplify deployment started"
+              fi
+              
+              echo "🚀 Automated deployment initiated"
+              echo "📱 Amplify App URL: https://$AMPLIFY_BRANCH_NAME.$AMPLIFY_APP_ID.amplifyapp.com"
+            else
+              echo "⚠️ Builds bucket not found, skipping S3 upload"
+            fi
+            
+            cd ../Backend
+          else
+            echo "⚠️ Frontend directory not found, skipping frontend deployment"
+          fi
+          
+          echo ""
+          echo "=== Monitoring Data Source Ingestion ==="
+          
+          # Monitor S3 ingestion job
+          echo "Monitoring S3 ingestion job: $S3_INGESTION_JOB_ID"
+          S3_JOB_STATUS="IN_PROGRESS"
+          WAIT_TIME=0
+          MAX_WAIT=600  # 10 minutes max wait
+          
+          while [ "$S3_JOB_STATUS" = "IN_PROGRESS" ] && [ $WAIT_TIME -lt $MAX_WAIT ]; do
+            sleep 30
+            WAIT_TIME=$((WAIT_TIME + 30))
+            
+            S3_JOB_STATUS=$(aws bedrock-agent get-ingestion-job \
+              --knowledge-base-id "$KB_ID" \
+              --data-source-id "$S3_DS_ID" \
+              --ingestion-job-id "$S3_INGESTION_JOB_ID" \
+              --region "$CDK_DEFAULT_REGION" \
+              --query 'ingestionJob.status' --output text)
+            
+            echo "S3 ingestion status: $S3_JOB_STATUS (waited ${WAIT_TIME}s)"
+          done
+          
+          if [ "$S3_JOB_STATUS" = "COMPLETE" ]; then
+            echo "✅ S3 ingestion completed successfully"
+          else
+            echo "⚠️ S3 ingestion status: $S3_JOB_STATUS (continuing anyway)"
+          fi
+          
+          # Monitor Web Crawler ingestion job (shorter wait since it takes longer)
+          echo "Checking Web Crawler ingestion job: $WEB_INGESTION_JOB_ID"
+          WEB_JOB_STATUS=$(aws bedrock-agent get-ingestion-job \
+            --knowledge-base-id "$KB_ID" \
+            --data-source-id "$WEB_DS_ID" \
+            --ingestion-job-id "$WEB_INGESTION_JOB_ID" \
+            --region "$CDK_DEFAULT_REGION" \
+            --query 'ingestionJob.status' --output text)
+          
+          echo "Web Crawler ingestion status: $WEB_JOB_STATUS"
+          
+          if [ "$WEB_JOB_STATUS" = "IN_PROGRESS" ]; then
+            echo "⏳ Web crawling is in progress (this can take 10-20 minutes)"
+            echo "📊 You can monitor progress in the Bedrock console"
+          elif [ "$WEB_JOB_STATUS" = "COMPLETE" ]; then
+            echo "✅ Web crawling completed successfully"
+          else
+            echo "⚠️ Web crawling status: $WEB_JOB_STATUS"
+          fi
+          
+          echo ""
           echo "========================================="
           echo "✅ Deployment Complete!"
           echo "========================================="
@@ -131,6 +314,8 @@ phases:
           echo "📊 S3 Ingestion Job ID: $S3_INGESTION_JOB_ID"
           echo "🕷️ Web Ingestion Job ID: $WEB_INGESTION_JOB_ID"
           echo "🌐 API Gateway URL: $API_URL"
+          echo "📱 Frontend URL: https://$AMPLIFY_BRANCH_NAME.$AMPLIFY_APP_ID.amplifyapp.com"
+          echo "🚀 Deployment Type: Automated via Amplify (no GitHub required)"
           echo "========================================="
           echo ""
           echo "========================================="
@@ -184,6 +369,7 @@ phases:
           echo ""
           echo "💰 Estimated monthly cost: \$8-20 (vs \$20+ for Q Business)"
           echo "🎯 Features: Dual data sources, bilingual support, automatic web crawling, markdown support"
+          echo "🚀 Frontend: Automatically deployed to Amplify (no GitHub required)"
           echo ""
         fi
 
