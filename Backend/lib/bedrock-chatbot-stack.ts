@@ -828,10 +828,7 @@ export class BedrockChatbotStack extends cdk.Stack {
     // Update Lambda environment variables with actual Knowledge Base ID
     chatLambda.addEnvironment('KNOWLEDGE_BASE_ID', knowledgeBase.attrKnowledgeBaseId);
     dataIngestionLambda.addEnvironment('KNOWLEDGE_BASE_ID', knowledgeBase.attrKnowledgeBaseId);
-    dataIngestionLambda.addEnvironment('DATA_SOURCE_ID', dataSource.attrDataSourceId);
-    dataIngestionLambda.addEnvironment('S3_DATA_SOURCE_ID', dataSource.attrDataSourceId);
-    dataIngestionLambda.addEnvironment('WEB_DATA_SOURCE_ID', webCrawlerDataSource.attrDataSourceId);
-    dataIngestionLambda.addEnvironment('DAILY_SYNC_DATA_SOURCE_ID', dailySyncDataSource.attrDataSourceId);
+    // Note: Data source IDs will be discovered dynamically in buildspec.yml
 
     // Grant documents bucket access to data ingestion Lambda
     documentsBucket.grantReadWrite(dataIngestionLambda);
@@ -868,15 +865,8 @@ export class BedrockChatbotStack extends cdk.Stack {
       description: 'Bedrock Knowledge Base ID',
     });
 
-    new cdk.CfnOutput(this, 'S3DataSourceId', {
-      value: dataSource.attrDataSourceId,
-      description: 'S3 Data Source ID for Knowledge Base',
-    });
-
-    new cdk.CfnOutput(this, 'WebDataSourceId', {
-      value: webCrawlerDataSource.attrDataSourceId,
-      description: 'Web Crawler Data Source ID for Knowledge Base',
-    });
+    // Note: Data source outputs removed to avoid reference errors
+    // Data source IDs will be discovered dynamically in buildspec.yml
 
     new cdk.CfnOutput(this, 'KnowledgeBaseRoleArn', {
       value: knowledgeBaseRole.roleArn,

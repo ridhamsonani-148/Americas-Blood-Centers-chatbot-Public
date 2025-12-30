@@ -73,10 +73,31 @@ phases:
           STACK_NAME="AmericasBloodCentersBedrockStack"
           DOCUMENTS_BUCKET=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.DocumentsBucketName // empty')
           KB_ID=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.KnowledgeBaseId // empty')
-          S3_DS_ID=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.S3DataSourceId // empty')
-          WEB_DS_ID=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.WebDataSourceId // empty')
           API_URL=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.ApiGatewayUrl // empty')
           OPENSEARCH_ENDPOINT=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.OpenSearchCollectionEndpoint // empty')
+          
+          # Discover data source IDs dynamically by name
+          echo "Discovering data source IDs by name..."
+          S3_DS_ID=$(aws bedrock-agent list-data-sources \
+            --knowledge-base-id "$KB_ID" \
+            --region "$CDK_DEFAULT_REGION" \
+            --query 'dataSourceSummaries[?name==`BloodCentersDocuments-v2`].dataSourceId' \
+            --output text)
+          echo "Found S3 Data Source ID: $S3_DS_ID"
+          
+          WEB_DS_ID=$(aws bedrock-agent list-data-sources \
+            --knowledge-base-id "$KB_ID" \
+            --region "$CDK_DEFAULT_REGION" \
+            --query 'dataSourceSummaries[?name==`BloodCentersWebsite-v2`].dataSourceId' \
+            --output text)
+          echo "Found Web Data Source ID: $WEB_DS_ID"
+          
+          DAILY_DS_ID=$(aws bedrock-agent list-data-sources \
+            --knowledge-base-id "$KB_ID" \
+            --region "$CDK_DEFAULT_REGION" \
+            --query 'dataSourceSummaries[?name==`BloodCentersDailySync-v2`].dataSourceId' \
+            --output text)
+          echo "Found Daily Sync Data Source ID: $DAILY_DS_ID"
           
           if [ -z "$DOCUMENTS_BUCKET" ] || [ -z "$KB_ID" ] || [ -z "$API_URL" ]; then
             echo "❌ ERROR: Failed to extract required outputs from CDK deployment"
@@ -86,38 +107,94 @@ phases:
             exit 1
           fi
           
+          # Check if data sources exist, if not they will be created by CDK
+          if [ -z "$S3_DS_ID" ] || [ "$S3_DS_ID" = "None" ]; then
+            echo "⚠️ S3 Data Source not found - will be created by CDK"
+            S3_DS_ID=""
+          fi
+          
+          if [ -z "$WEB_DS_ID" ] || [ "$WEB_DS_ID" = "None" ]; then
+            echo "⚠️ Web Data Source not found - will be created by CDK"
+            WEB_DS_ID=""
+          fi
+          
+          if [ -z "$DAILY_DS_ID" ] || [ "$DAILY_DS_ID" = "None" ]; then
+            echo "⚠️ Daily Sync Data Source not found - will be created by CDK"
+            DAILY_DS_ID=""
+          fi
+          
           echo "✅ Outputs extracted successfully"
           echo "  📁 Documents Bucket: $DOCUMENTS_BUCKET"
           echo "  🧠 Knowledge Base ID: $KB_ID"
           echo "  📄 S3 Data Source ID: $S3_DS_ID"
           echo "  🌐 Web Data Source ID: $WEB_DS_ID"
+          echo "  📅 Daily Sync Data Source ID: $DAILY_DS_ID"
           echo "  🌐 API Gateway URL: $API_URL"
           echo "  🔍 OpenSearch Endpoint: $OPENSEARCH_ENDPOINT"
           
           echo ""
           echo "=== Starting Knowledge Base Ingestion ==="
           
-          # Start S3 ingestion job for PDFs
-          echo "Starting S3 ingestion job for PDFs..."
-          S3_INGESTION_JOB_ID=$(aws bedrock-agent start-ingestion-job \
-            --knowledge-base-id "$KB_ID" \
-            --data-source-id "$S3_DS_ID" \
-            --description "Initial ingestion of PDF documents" \
-            --region "$CDK_DEFAULT_REGION" \
-            --query 'ingestionJob.ingestionJobId' --output text)
+          # Wait a moment for data sources to be fully created
+          echo "Waiting for data sources to be ready..."
+          sleep 30
           
-          echo "✓ S3 ingestion job started: $S3_INGESTION_JOB_ID"
+          # Re-discover data source IDs after CDK deployment
+          echo "Re-discovering data source IDs after CDK deployment..."
+          S3_DS_ID=$(aws bedrock-agent list-data-sources \
+            --knowledge-base-id "$KB_ID" \
+            --region "$CDK_DEFAULT_REGION" \
+            --query 'dataSourceSummaries[?name==`BloodCentersDocuments-v2`].dataSourceId' \
+            --output text)
+          
+          WEB_DS_ID=$(aws bedrock-agent list-data-sources \
+            --knowledge-base-id "$KB_ID" \
+            --region "$CDK_DEFAULT_REGION" \
+            --query 'dataSourceSummaries[?name==`BloodCentersWebsite-v2`].dataSourceId' \
+            --output text)
+          
+          DAILY_DS_ID=$(aws bedrock-agent list-data-sources \
+            --knowledge-base-id "$KB_ID" \
+            --region "$CDK_DEFAULT_REGION" \
+            --query 'dataSourceSummaries[?name==`BloodCentersDailySync-v2`].dataSourceId' \
+            --output text)
+          
+          echo "Final Data Source IDs:"
+          echo "  S3: $S3_DS_ID"
+          echo "  Web: $WEB_DS_ID"
+          echo "  Daily: $DAILY_DS_ID"
+          
+          # Start S3 ingestion job for PDFs
+          if [ -n "$S3_DS_ID" ] && [ "$S3_DS_ID" != "None" ]; then
+            echo "Starting S3 ingestion job for PDFs..."
+            S3_INGESTION_JOB_ID=$(aws bedrock-agent start-ingestion-job \
+              --knowledge-base-id "$KB_ID" \
+              --data-source-id "$S3_DS_ID" \
+              --description "Initial ingestion of PDF documents" \
+              --region "$CDK_DEFAULT_REGION" \
+              --query 'ingestionJob.ingestionJobId' --output text)
+            
+            echo "✓ S3 ingestion job started: $S3_INGESTION_JOB_ID"
+          else
+            echo "⚠️ S3 Data Source not found, skipping S3 ingestion"
+            S3_INGESTION_JOB_ID=""
+          fi
           
           # Start Web Crawler ingestion job
-          echo "Starting Web Crawler ingestion job..."
-          WEB_INGESTION_JOB_ID=$(aws bedrock-agent start-ingestion-job \
-            --knowledge-base-id "$KB_ID" \
-            --data-source-id "$WEB_DS_ID" \
-            --description "Initial crawling of America's Blood Centers websites" \
-            --region "$CDK_DEFAULT_REGION" \
-            --query 'ingestionJob.ingestionJobId' --output text)
-          
-          echo "✓ Web Crawler ingestion job started: $WEB_INGESTION_JOB_ID"
+          if [ -n "$WEB_DS_ID" ] && [ "$WEB_DS_ID" != "None" ]; then
+            echo "Starting Web Crawler ingestion job..."
+            WEB_INGESTION_JOB_ID=$(aws bedrock-agent start-ingestion-job \
+              --knowledge-base-id "$KB_ID" \
+              --data-source-id "$WEB_DS_ID" \
+              --description "Initial crawling of America's Blood Centers websites" \
+              --region "$CDK_DEFAULT_REGION" \
+              --query 'ingestionJob.ingestionJobId' --output text)
+            
+            echo "✓ Web Crawler ingestion job started: $WEB_INGESTION_JOB_ID"
+          else
+            echo "⚠️ Web Data Source not found, skipping Web ingestion"
+            WEB_INGESTION_JOB_ID=""
+          fi
           
           echo ""
           echo "=== Amplify App Setup ==="
@@ -257,49 +334,57 @@ phases:
           echo "=== Monitoring Data Source Ingestion ==="
           
           # Monitor S3 ingestion job
-          echo "Monitoring S3 ingestion job: $S3_INGESTION_JOB_ID"
-          S3_JOB_STATUS="IN_PROGRESS"
-          WAIT_TIME=0
-          MAX_WAIT=600  # 10 minutes max wait
-          
-          while [ "$S3_JOB_STATUS" = "IN_PROGRESS" ] && [ $WAIT_TIME -lt $MAX_WAIT ]; do
-            sleep 30
-            WAIT_TIME=$((WAIT_TIME + 30))
+          if [ -n "$S3_INGESTION_JOB_ID" ] && [ "$S3_INGESTION_JOB_ID" != "None" ]; then
+            echo "Monitoring S3 ingestion job: $S3_INGESTION_JOB_ID"
+            S3_JOB_STATUS="IN_PROGRESS"
+            WAIT_TIME=0
+            MAX_WAIT=600  # 10 minutes max wait
             
-            S3_JOB_STATUS=$(aws bedrock-agent get-ingestion-job \
-              --knowledge-base-id "$KB_ID" \
-              --data-source-id "$S3_DS_ID" \
-              --ingestion-job-id "$S3_INGESTION_JOB_ID" \
-              --region "$CDK_DEFAULT_REGION" \
-              --query 'ingestionJob.status' --output text)
+            while [ "$S3_JOB_STATUS" = "IN_PROGRESS" ] && [ $WAIT_TIME -lt $MAX_WAIT ]; do
+              sleep 30
+              WAIT_TIME=$((WAIT_TIME + 30))
+              
+              S3_JOB_STATUS=$(aws bedrock-agent get-ingestion-job \
+                --knowledge-base-id "$KB_ID" \
+                --data-source-id "$S3_DS_ID" \
+                --ingestion-job-id "$S3_INGESTION_JOB_ID" \
+                --region "$CDK_DEFAULT_REGION" \
+                --query 'ingestionJob.status' --output text)
+              
+              echo "S3 ingestion status: $S3_JOB_STATUS (waited ${WAIT_TIME}s)"
+            done
             
-            echo "S3 ingestion status: $S3_JOB_STATUS (waited ${WAIT_TIME}s)"
-          done
-          
-          if [ "$S3_JOB_STATUS" = "COMPLETE" ]; then
-            echo "✅ S3 ingestion completed successfully"
+            if [ "$S3_JOB_STATUS" = "COMPLETE" ]; then
+              echo "✅ S3 ingestion completed successfully"
+            else
+              echo "⚠️ S3 ingestion status: $S3_JOB_STATUS (continuing anyway)"
+            fi
           else
-            echo "⚠️ S3 ingestion status: $S3_JOB_STATUS (continuing anyway)"
+            echo "⚠️ No S3 ingestion job to monitor"
           fi
           
           # Monitor Web Crawler ingestion job (shorter wait since it takes longer)
-          echo "Checking Web Crawler ingestion job: $WEB_INGESTION_JOB_ID"
-          WEB_JOB_STATUS=$(aws bedrock-agent get-ingestion-job \
-            --knowledge-base-id "$KB_ID" \
-            --data-source-id "$WEB_DS_ID" \
-            --ingestion-job-id "$WEB_INGESTION_JOB_ID" \
-            --region "$CDK_DEFAULT_REGION" \
-            --query 'ingestionJob.status' --output text)
-          
-          echo "Web Crawler ingestion status: $WEB_JOB_STATUS"
-          
-          if [ "$WEB_JOB_STATUS" = "IN_PROGRESS" ]; then
-            echo "⏳ Web crawling is in progress (this can take 10-20 minutes)"
-            echo "📊 You can monitor progress in the Bedrock console"
-          elif [ "$WEB_JOB_STATUS" = "COMPLETE" ]; then
-            echo "✅ Web crawling completed successfully"
+          if [ -n "$WEB_INGESTION_JOB_ID" ] && [ "$WEB_INGESTION_JOB_ID" != "None" ]; then
+            echo "Checking Web Crawler ingestion job: $WEB_INGESTION_JOB_ID"
+            WEB_JOB_STATUS=$(aws bedrock-agent get-ingestion-job \
+              --knowledge-base-id "$KB_ID" \
+              --data-source-id "$WEB_DS_ID" \
+              --ingestion-job-id "$WEB_INGESTION_JOB_ID" \
+              --region "$CDK_DEFAULT_REGION" \
+              --query 'ingestionJob.status' --output text)
+            
+            echo "Web Crawler ingestion status: $WEB_JOB_STATUS"
+            
+            if [ "$WEB_JOB_STATUS" = "IN_PROGRESS" ]; then
+              echo "⏳ Web crawling is in progress (this can take 10-20 minutes)"
+              echo "📊 You can monitor progress in the Bedrock console"
+            elif [ "$WEB_JOB_STATUS" = "COMPLETE" ]; then
+              echo "✅ Web crawling completed successfully"
+            else
+              echo "⚠️ Web crawling status: $WEB_JOB_STATUS"
+            fi
           else
-            echo "⚠️ Web crawling status: $WEB_JOB_STATUS"
+            echo "⚠️ No Web ingestion job to monitor"
           fi
           
           echo ""
