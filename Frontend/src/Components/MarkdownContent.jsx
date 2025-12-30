@@ -29,15 +29,15 @@ function MarkdownContent({ content, className = '' }) {
             </Link>
           ),
           
-          // Style code blocks
+          // Style code blocks - smaller font
           code: ({ children, ...props }) => (
             <Box
               component="code"
               sx={{
                 backgroundColor: '#f5f5f5',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                fontSize: '0.875rem',
+                padding: '2px 4px',
+                borderRadius: '3px',
+                fontSize: '0.8125rem', // 13px - smaller than default
                 fontFamily: 'monospace',
                 border: '1px solid #e0e0e0',
               }}
@@ -47,15 +47,15 @@ function MarkdownContent({ content, className = '' }) {
             </Box>
           ),
           
-          // Style unordered lists
+          // Style unordered lists - more compact
           ul: ({ children, ...props }) => (
             <Box
               component="ul"
               sx={{
-                paddingLeft: '1.5rem',
-                margin: '0.5rem 0',
+                paddingLeft: '1.25rem', // Reduced from 1.5rem
+                margin: '0.4rem 0', // Reduced from 0.5rem
                 '& li': {
-                  marginBottom: '0.25rem',
+                  marginBottom: '0.2rem', // Reduced from 0.25rem
                   lineHeight: 1.6,
                 },
               }}
@@ -65,15 +65,15 @@ function MarkdownContent({ content, className = '' }) {
             </Box>
           ),
           
-          // Style ordered lists
+          // Style ordered lists - more compact
           ol: ({ children, ...props }) => (
             <Box
               component="ol"
               sx={{
-                paddingLeft: '1.5rem',
-                margin: '0.5rem 0',
+                paddingLeft: '1.25rem', // Reduced from 1.5rem
+                margin: '0.4rem 0', // Reduced from 0.5rem
                 '& li': {
-                  marginBottom: '0.25rem',
+                  marginBottom: '0.2rem', // Reduced from 0.25rem
                   lineHeight: 1.6,
                 },
               }}
@@ -83,14 +83,15 @@ function MarkdownContent({ content, className = '' }) {
             </Box>
           ),
           
-          // Style list items
+          // Style list items - smaller font size
           li: ({ children, ...props }) => (
             <Typography
               component="li"
-              variant="body1"
+              variant="body2"
               sx={{
+                fontSize: '0.875rem', // 14px - smaller than default
                 lineHeight: 1.6,
-                marginBottom: '0.25rem',
+                marginBottom: '0.2rem',
               }}
               {...props}
             >
@@ -98,13 +99,14 @@ function MarkdownContent({ content, className = '' }) {
             </Typography>
           ),
           
-          // Style paragraphs
+          // Style paragraphs - smaller font size
           p: ({ children, ...props }) => (
             <Typography
-              variant="body1"
+              variant="body2"
               sx={{
+                fontSize: '0.875rem', // 14px - smaller than default
                 lineHeight: 1.6,
-                marginBottom: '0.75rem',
+                marginBottom: '0.6rem',
                 '&:last-child': {
                   marginBottom: 0,
                 },
@@ -115,15 +117,16 @@ function MarkdownContent({ content, className = '' }) {
             </Typography>
           ),
           
-          // Style headings
+          // Style headings - smaller sizes appropriate for chatbot
           h1: ({ children, ...props }) => (
             <Typography
-              variant="h4"
+              variant="body1"
               component="h1"
               sx={{
+                fontSize: '1.125rem', // 18px - equivalent to text-lg
                 fontWeight: 'bold',
-                marginBottom: '0.75rem',
-                marginTop: '1rem',
+                marginBottom: '0.5rem',
+                marginTop: '0.75rem',
                 color: '#333',
                 '&:first-of-type': {
                   marginTop: 0,
@@ -137,12 +140,13 @@ function MarkdownContent({ content, className = '' }) {
           
           h2: ({ children, ...props }) => (
             <Typography
-              variant="h5"
+              variant="body1"
               component="h2"
               sx={{
+                fontSize: '1rem', // 16px - equivalent to text-base
                 fontWeight: 'bold',
                 marginBottom: '0.5rem',
-                marginTop: '1rem',
+                marginTop: '0.75rem',
                 color: '#333',
                 '&:first-of-type': {
                   marginTop: 0,
@@ -156,12 +160,13 @@ function MarkdownContent({ content, className = '' }) {
           
           h3: ({ children, ...props }) => (
             <Typography
-              variant="h6"
+              variant="body1"
               component="h3"
               sx={{
+                fontSize: '0.9375rem', // 15px - equivalent to text-[15px]
                 fontWeight: 'bold',
-                marginBottom: '0.5rem',
-                marginTop: '0.75rem',
+                marginBottom: '0.4rem',
+                marginTop: '0.6rem',
                 color: '#333',
                 '&:first-of-type': {
                   marginTop: 0,
@@ -175,12 +180,13 @@ function MarkdownContent({ content, className = '' }) {
           
           h4: ({ children, ...props }) => (
             <Typography
-              variant="subtitle1"
+              variant="body1"
               component="h4"
               sx={{
+                fontSize: '0.875rem', // 14px - smaller than h3
                 fontWeight: 'bold',
-                marginBottom: '0.5rem',
-                marginTop: '0.75rem',
+                marginBottom: '0.4rem',
+                marginTop: '0.6rem',
                 color: '#333',
                 '&:first-of-type': {
                   marginTop: 0,
@@ -194,12 +200,13 @@ function MarkdownContent({ content, className = '' }) {
           
           h5: ({ children, ...props }) => (
             <Typography
-              variant="subtitle2"
+              variant="body1"
               component="h5"
               sx={{
-                fontWeight: 'bold',
-                marginBottom: '0.5rem',
-                marginTop: '0.75rem',
+                fontSize: '0.875rem', // 14px - same as h4
+                fontWeight: '600',
+                marginBottom: '0.4rem',
+                marginTop: '0.6rem',
                 color: '#333',
                 '&:first-of-type': {
                   marginTop: 0,
@@ -216,9 +223,10 @@ function MarkdownContent({ content, className = '' }) {
               variant="body1"
               component="h6"
               sx={{
-                fontWeight: 'bold',
-                marginBottom: '0.5rem',
-                marginTop: '0.75rem',
+                fontSize: '0.875rem', // 14px - same as body text but bold
+                fontWeight: '600',
+                marginBottom: '0.4rem',
+                marginTop: '0.6rem',
                 color: '#333',
                 '&:first-of-type': {
                   marginTop: 0,
@@ -256,18 +264,19 @@ function MarkdownContent({ content, className = '' }) {
             </Box>
           ),
           
-          // Style blockquotes
+          // Style blockquotes - more compact
           blockquote: ({ children, ...props }) => (
             <Box
               component="blockquote"
               sx={{
-                borderLeft: `4px solid ${PRIMARY_MAIN}`,
-                paddingLeft: '1rem',
-                margin: '1rem 0',
+                borderLeft: `3px solid ${PRIMARY_MAIN}`,
+                paddingLeft: '0.75rem',
+                margin: '0.6rem 0',
                 backgroundColor: '#f9f9f9',
-                padding: '0.75rem 1rem',
-                borderRadius: '0 4px 4px 0',
+                padding: '0.5rem 0.75rem',
+                borderRadius: '0 3px 3px 0',
                 fontStyle: 'italic',
+                fontSize: '0.875rem', // Same as paragraph text
               }}
               {...props}
             >
