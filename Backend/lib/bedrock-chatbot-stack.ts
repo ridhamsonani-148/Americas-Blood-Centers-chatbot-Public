@@ -821,21 +821,6 @@ export class BedrockChatbotStack extends cdk.Stack {
       description: 'Web Crawler Data Source ID for Knowledge Base',
     });
 
-    new cdk.CfnOutput(this, 'KnowledgeBaseId', {
-      value: knowledgeBase.attrKnowledgeBaseId,
-      description: 'Bedrock Knowledge Base ID',
-    });
-
-    new cdk.CfnOutput(this, 'S3DataSourceId', {
-      value: dataSource.attrDataSourceId,
-      description: 'S3 Data Source ID for Knowledge Base',
-    });
-
-    new cdk.CfnOutput(this, 'WebDataSourceId', {
-      value: webCrawlerDataSource.attrDataSourceId,
-      description: 'Web Crawler Data Source ID for Knowledge Base',
-    });
-
     new cdk.CfnOutput(this, 'KnowledgeBaseRoleArn', {
       value: knowledgeBaseRole.roleArn,
       description: 'Knowledge Base IAM Role ARN',
