@@ -13,6 +13,7 @@ import {
   WHITE,
   LIGHT_BACKGROUND
 } from "../utilities/constants"
+import MarkdownContent from "./MarkdownContent"
 
 function BotReply({ message, sources = [], currentLanguage }) {
   const [showAllSources, setShowAllSources] = useState(false)
@@ -97,19 +98,13 @@ function BotReply({ message, sources = [], currentLanguage }) {
           marginLeft: "0.5rem",
         }}
       >
-        {/* Message Text - Raw Claude Response */}
-        <Typography
-          variant="body1"
+        {/* Message Text - Rendered with Markdown Support */}
+        <MarkdownContent 
+          content={message}
           sx={{
-            lineHeight: 1.6,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            color: "#333",
             mb: sources.length > 0 ? 2 : 0,
           }}
-        >
-          {message}
-        </Typography>
+        />
 
         {/* Sources */}
         {sources && sources.length > 0 && (

@@ -445,21 +445,23 @@ export class BedrockChatbotStack extends cdk.Stack {
 
     const dataSource = new bedrock.CfnDataSource(this, "BloodCentersDataSource", {
       name: "BloodCentersDocuments-v2",
-      description: "America's Blood Centers documents including donation guides, eligibility information, and blood supply data",
+      description: "America's Blood Centers PDF documents including donation guides, eligibility information, and blood supply data",
       knowledgeBaseId: knowledgeBase.attrKnowledgeBaseId,
       dataSourceConfiguration: {
         type: "S3",
         s3Configuration: {
           bucketArn: documentsBucket.bucketArn,
+          inclusionPrefixes: ["pdfs/"], // Only sync files from pdfs/ folder
         },
       },
       vectorIngestionConfiguration: {
-        // Fixed size chunking (default: 300 tokens, 20% overlap)
+        // Semantic chunking with size 1500 for better context understanding
         chunkingConfiguration: {
-          chunkingStrategy: "FIXED_SIZE",
-          fixedSizeChunkingConfiguration: {
-            maxTokens: 300,
-            overlapPercentage: 20,
+          chunkingStrategy: "SEMANTIC",
+          semanticChunkingConfiguration: {
+            maxTokens: 1500,
+            bufferSize: 0,
+            breakpointPercentileThreshold: 95,
           },
         },
         // Use Bedrock Data Automation (BDA) for advanced document parsing
@@ -497,18 +499,25 @@ export class BedrockChatbotStack extends cdk.Stack {
           },
           crawlerConfiguration: {
             crawlerLimits: {
-              maxPages: 500, // Limit pages per seed URL to control costs
-              rateLimit: 30, // Requests per minute to be respectful to servers
+              maxPages: 1500, // Maximum pages set to 1500 per seed URL
+              rateLimit: 300, // Rate limit for controlled crawling
             },
+            exclusionFilters: [
+              ".*/wp-admin/.*", 
+              ".*/login/.*", 
+              ".*/admin/.*"
+            ],
           },
         },
       },
       vectorIngestionConfiguration: {
+        // Semantic chunking with size 1500 for better context understanding
         chunkingConfiguration: {
-          chunkingStrategy: "FIXED_SIZE",
-          fixedSizeChunkingConfiguration: {
-            maxTokens: 500,
-            overlapPercentage: 20,
+          chunkingStrategy: "SEMANTIC",
+          semanticChunkingConfiguration: {
+            maxTokens: 1500,
+            bufferSize: 0,
+            breakpointPercentileThreshold: 95,
           },
         },
         // Use Bedrock Data Automation (BDA) for advanced document parsing
@@ -521,8 +530,61 @@ export class BedrockChatbotStack extends cdk.Stack {
       },
     });
 
-    // Ensure web crawler data source is created after knowledge base
-    webCrawlerDataSource.addDependency(knowledgeBase);
+    // Ensure web crawler data source is created after PDF data source for proper sync sequencing
+    webCrawlerDataSource.addDependency(dataSource);
+
+    // ========================================
+    // Daily Sync Data Source for Specific URLs
+    // ========================================
+    const dailySyncDataSource = new bedrock.CfnDataSource(this, "BloodCentersDailySyncDataSource", {
+      name: "BloodCentersDailySync-v2",
+      description: "Daily sync data source for specific blood donation pages that update frequently",
+      knowledgeBaseId: knowledgeBase.attrKnowledgeBaseId,
+      dataSourceConfiguration: {
+        type: "WEB",
+        webConfiguration: {
+          sourceConfiguration: {
+            urlConfiguration: {
+              seedUrls: [
+                { url: "https://americasblood.org/for-donors/americas-blood-supply/" }, // Daily blood supply status
+              ],
+            },
+          },
+          crawlerConfiguration: {
+            crawlerLimits: {
+              maxPages: 1500, // Maximum pages set to 1500 for daily sync
+              rateLimit: 300, // Fast rate for daily updates
+            },
+            exclusionFilters: [
+              ".*/wp-admin/.*", 
+              ".*/login/.*", 
+              ".*/admin/.*"
+            ],
+          },
+        },
+      },
+      vectorIngestionConfiguration: {
+        // Semantic chunking with size 1500 for better context understanding
+        chunkingConfiguration: {
+          chunkingStrategy: "SEMANTIC",
+          semanticChunkingConfiguration: {
+            maxTokens: 1500,
+            bufferSize: 0,
+            breakpointPercentileThreshold: 95,
+          },
+        },
+        // Use Bedrock Data Automation (BDA) for advanced document parsing
+        parsingConfiguration: {
+          parsingStrategy: "BEDROCK_DATA_AUTOMATION",
+          bedrockDataAutomationConfiguration: {
+            parsingModality: "MULTIMODAL",
+          },
+        },
+      },
+    });
+
+    // Ensure daily sync data source is created after web crawler data source for proper sync sequencing
+    dailySyncDataSource.addDependency(webCrawlerDataSource);
 
     // Grant data access to the OpenSearch Serverless collection
     vectorCollection.grantDataAccess(knowledgeBaseRole);
@@ -769,6 +831,7 @@ export class BedrockChatbotStack extends cdk.Stack {
     dataIngestionLambda.addEnvironment('DATA_SOURCE_ID', dataSource.attrDataSourceId);
     dataIngestionLambda.addEnvironment('S3_DATA_SOURCE_ID', dataSource.attrDataSourceId);
     dataIngestionLambda.addEnvironment('WEB_DATA_SOURCE_ID', webCrawlerDataSource.attrDataSourceId);
+    dataIngestionLambda.addEnvironment('DAILY_SYNC_DATA_SOURCE_ID', dailySyncDataSource.attrDataSourceId);
 
     // Grant documents bucket access to data ingestion Lambda
     documentsBucket.grantReadWrite(dataIngestionLambda);
