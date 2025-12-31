@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Box, 
   Paper, 
@@ -28,9 +28,9 @@ import {
 import HistoryIcon from "@mui/icons-material/History";
 import SettingsIcon from "@mui/icons-material/Settings";
 import DashboardIcon from "@mui/icons-material/Dashboard";
-import { PRIMARY_MAIN, WHITE, DARK_BLUE } from '../utilities/constants';
+import { PRIMARY_MAIN, DARK_BLUE } from '../utilities/constants';
 
-const AdminPage = () => {
+const AdminPage = ({ onLogout }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [activeTab, setActiveTab] = useState(0);
@@ -47,7 +47,7 @@ const AdminPage = () => {
   const API_URL = process.env.REACT_APP_API_BASE_URL || process.env.REACT_APP_CHAT_ENDPOINT;
 
   // Fetch chat history
-  const fetchChatHistory = async (page = 1, filters = {}) => {
+  const fetchChatHistory = useCallback(async (page = 1, filters = {}) => {
     setIsLoading(true);
     try {
       const queryParams = new URLSearchParams({
@@ -76,7 +76,7 @@ const AdminPage = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [API_URL, pageSize]);
 
   // Load chat history when tab changes or filters change
   useEffect(() => {
@@ -86,7 +86,7 @@ const AdminPage = () => {
       if (languageFilter) filters.language = languageFilter;
       fetchChatHistory(currentPage, filters);
     }
-  }, [activeTab, currentPage, dateFilter, languageFilter]);
+  }, [activeTab, currentPage, dateFilter, languageFilter, fetchChatHistory]);
 
   const triggerDataSync = async (syncType) => {
     setIsLoading(true);
@@ -108,7 +108,7 @@ const AdminPage = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
+      await response.json();
       setStatus(`${syncType} sync started successfully`);
     } catch (error) {
       console.error('Error triggering sync:', error);
@@ -182,6 +182,13 @@ const AdminPage = () => {
             sx={{ ml: 2 }}
           >
             Back to Chat
+          </Button>
+          <Button 
+            color="inherit" 
+            onClick={onLogout}
+            sx={{ ml: 1 }}
+          >
+            Logout
           </Button>
         </Toolbar>
       </AppBar>

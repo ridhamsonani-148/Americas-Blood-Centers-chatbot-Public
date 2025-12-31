@@ -76,29 +76,6 @@ phases:
           API_URL=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.ApiGatewayUrl // empty')
           OPENSEARCH_ENDPOINT=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.OpenSearchCollectionEndpoint // empty')
           
-          # Discover data source IDs dynamically by name
-          echo "Discovering data source IDs by name..."
-          S3_DS_ID=$(aws bedrock-agent list-data-sources \
-            --knowledge-base-id "$KB_ID" \
-            --region "$CDK_DEFAULT_REGION" \
-            --query 'dataSourceSummaries[?name==`BloodCentersDocuments-v2`].dataSourceId' \
-            --output text)
-          echo "Found S3 Data Source ID: $S3_DS_ID"
-          
-          WEB_DS_ID=$(aws bedrock-agent list-data-sources \
-            --knowledge-base-id "$KB_ID" \
-            --region "$CDK_DEFAULT_REGION" \
-            --query 'dataSourceSummaries[?name==`BloodCentersWebsite-v2`].dataSourceId' \
-            --output text)
-          echo "Found Web Data Source ID: $WEB_DS_ID"
-          
-          DAILY_DS_ID=$(aws bedrock-agent list-data-sources \
-            --knowledge-base-id "$KB_ID" \
-            --region "$CDK_DEFAULT_REGION" \
-            --query 'dataSourceSummaries[?name==`BloodCentersDailySync-v2`].dataSourceId' \
-            --output text)
-          echo "Found Daily Sync Data Source ID: $DAILY_DS_ID"
-          
           if [ -z "$DOCUMENTS_BUCKET" ] || [ -z "$KB_ID" ] || [ -z "$API_URL" ]; then
             echo "❌ ERROR: Failed to extract required outputs from CDK deployment"
             echo "Documents Bucket: $DOCUMENTS_BUCKET"
@@ -107,143 +84,77 @@ phases:
             exit 1
           fi
           
-          # Check if data sources exist, if not they will be created by CDK
-          if [ -z "$S3_DS_ID" ] || [ "$S3_DS_ID" = "None" ]; then
-            echo "⚠️ S3 Data Source not found - will be created by CDK"
-            S3_DS_ID=""
-          fi
-          
-          if [ -z "$WEB_DS_ID" ] || [ "$WEB_DS_ID" = "None" ]; then
-            echo "⚠️ Web Data Source not found - will be created by CDK"
-            WEB_DS_ID=""
-          fi
-          
-          if [ -z "$DAILY_DS_ID" ] || [ "$DAILY_DS_ID" = "None" ]; then
-            echo "⚠️ Daily Sync Data Source not found - will be created by CDK"
-            DAILY_DS_ID=""
-          fi
-          
           echo "✅ Outputs extracted successfully"
           echo "  📁 Documents Bucket: $DOCUMENTS_BUCKET"
           echo "  🧠 Knowledge Base ID: $KB_ID"
-          echo "  📄 S3 Data Source ID: $S3_DS_ID"
-          echo "  🌐 Web Data Source ID: $WEB_DS_ID"
-          echo "  📅 Daily Sync Data Source ID: $DAILY_DS_ID"
           echo "  🌐 API Gateway URL: $API_URL"
           echo "  🔍 OpenSearch Endpoint: $OPENSEARCH_ENDPOINT"
           
           echo ""
           echo "=== Starting Knowledge Base Ingestion ==="
           
-          # Wait a moment for data sources to be fully created
-          echo "Waiting for data sources to be ready..."
-          sleep 30
+          # Start ingestion for all data sources automatically
+          echo "Starting ingestion jobs for all data sources..."
           
-          # Re-discover data source IDs after CDK deployment
-          echo "Re-discovering data source IDs after CDK deployment..."
-          S3_DS_ID=$(aws bedrock-agent list-data-sources \
+          # Get all data sources and start ingestion jobs
+          DATA_SOURCES=$(aws bedrock-agent list-data-sources \
             --knowledge-base-id "$KB_ID" \
             --region "$CDK_DEFAULT_REGION" \
-            --query 'dataSourceSummaries[?name==`BloodCentersDocuments-v2`].dataSourceId' \
-            --output text)
+            --query 'dataSourceSummaries[].{name:name,id:dataSourceId}' \
+            --output json)
           
-          WEB_DS_ID=$(aws bedrock-agent list-data-sources \
-            --knowledge-base-id "$KB_ID" \
-            --region "$CDK_DEFAULT_REGION" \
-            --query 'dataSourceSummaries[?name==`BloodCentersWebsite-v2`].dataSourceId' \
-            --output text)
+          echo "Found data sources:"
+          echo "$DATA_SOURCES" | jq -r '.[] | "  📄 \(.name) (ID: \(.id))"'
           
-          DAILY_DS_ID=$(aws bedrock-agent list-data-sources \
-            --knowledge-base-id "$KB_ID" \
-            --region "$CDK_DEFAULT_REGION" \
-            --query 'dataSourceSummaries[?name==`BloodCentersDailySync-v2`].dataSourceId' \
-            --output text)
-          
-          echo "Final Data Source IDs:"
-          echo "  S3: $S3_DS_ID"
-          echo "  Web: $WEB_DS_ID"
-          echo "  Daily: $DAILY_DS_ID"
-          
-          # Start S3 ingestion job for PDFs
-          if [ -n "$S3_DS_ID" ] && [ "$S3_DS_ID" != "None" ]; then
-            echo "Starting S3 ingestion job for PDFs..."
-            S3_INGESTION_JOB_ID=$(aws bedrock-agent start-ingestion-job \
-              --knowledge-base-id "$KB_ID" \
-              --data-source-id "$S3_DS_ID" \
-              --description "Initial ingestion of PDF documents" \
-              --region "$CDK_DEFAULT_REGION" \
-              --query 'ingestionJob.ingestionJobId' --output text)
+          # Start ingestion jobs for each data source
+          INGESTION_JOBS=""
+          for row in $(echo "$DATA_SOURCES" | jq -r '.[] | @base64'); do
+            _jq() {
+              echo ${row} | base64 --decode | jq -r ${1}
+            }
             
-            echo "✓ S3 ingestion job started: $S3_INGESTION_JOB_ID"
-          else
-            echo "⚠️ S3 Data Source not found, skipping S3 ingestion"
-            S3_INGESTION_JOB_ID=""
-          fi
-          
-          # Start Web Crawler ingestion job
-          if [ -n "$WEB_DS_ID" ] && [ "$WEB_DS_ID" != "None" ]; then
-            echo "Starting Web Crawler ingestion job..."
-            WEB_INGESTION_JOB_ID=$(aws bedrock-agent start-ingestion-job \
-              --knowledge-base-id "$KB_ID" \
-              --data-source-id "$WEB_DS_ID" \
-              --description "Initial crawling of America's Blood Centers websites" \
-              --region "$CDK_DEFAULT_REGION" \
-              --query 'ingestionJob.ingestionJobId' --output text)
+            DS_NAME=$(_jq '.name')
+            DS_ID=$(_jq '.id')
             
-            echo "✓ Web Crawler ingestion job started: $WEB_INGESTION_JOB_ID"
-          else
-            echo "⚠️ Web Data Source not found, skipping Web ingestion"
-            WEB_INGESTION_JOB_ID=""
+            echo "🚀 Starting ingestion job for: $DS_NAME"
+            
+            JOB_ID=$(aws bedrock-agent start-ingestion-job \
+              --knowledge-base-id "$KB_ID" \
+              --data-source-id "$DS_ID" \
+              --description "Initial deployment ingestion of $DS_NAME" \
+              --region "$CDK_DEFAULT_REGION" \
+              --query 'ingestionJob.ingestionJobId' \
+              --output text 2>/dev/null)
+            
+            if [ -n "$JOB_ID" ] && [ "$JOB_ID" != "None" ]; then
+              echo "✅ Started ingestion job: $JOB_ID"
+              INGESTION_JOBS="$INGESTION_JOBS$DS_NAME: $JOB_ID\n"
+            else
+              echo "⚠️ Failed to start ingestion job for $DS_NAME"
+            fi
+            
+            # Wait a bit between jobs to avoid overwhelming the system
+            sleep 5
+          done
+          
+          if [ -n "$INGESTION_JOBS" ]; then
+            echo ""
+            echo "📊 Started ingestion jobs:"
+            echo -e "$INGESTION_JOBS"
           fi
           
           echo ""
           echo "=== Amplify App Setup ==="
           
-          # Set up Amplify app name
-          AMPLIFY_APP_NAME="${PROJECT_NAME}-chatbot"
-          AMPLIFY_BRANCH_NAME="main"
+          # Get Amplify App ID from CDK outputs
+          AMPLIFY_APP_ID=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.AmplifyAppId // empty')
           
-          echo "Creating/updating Amplify app..."
-          echo "App name: $AMPLIFY_APP_NAME"
-          
-          # First, try to find existing app
-          AMPLIFY_APP_ID=$(aws amplify list-apps \
-            --query "apps[?name=='$AMPLIFY_APP_NAME'].appId" \
-            --output text)
-          
-          if [ -z "$AMPLIFY_APP_ID" ] || [ "$AMPLIFY_APP_ID" = "None" ]; then
-            echo "No existing app found, creating new Amplify app..."
-            AMPLIFY_APP_ID=$(aws amplify create-app \
-              --name "$AMPLIFY_APP_NAME" \
-              --platform WEB \
-              --environment-variables "REACT_APP_API_BASE_URL=$API_URL,REACT_APP_CHAT_ENDPOINT=$API_URL,REACT_APP_HEALTH_ENDPOINT=$API_URL" \
-              --query 'app.appId' \
-              --output text)
+          if [ -n "$AMPLIFY_APP_ID" ] && [ "$AMPLIFY_APP_ID" != "empty" ]; then
+            echo "✅ Amplify App created via CDK: $AMPLIFY_APP_ID"
+            echo "📱 Amplify App URL: https://main.$AMPLIFY_APP_ID.amplifyapp.com"
           else
-            echo "Found existing app with ID: $AMPLIFY_APP_ID"
-            # Update environment variables for existing app
-            aws amplify update-app \
-              --app-id "$AMPLIFY_APP_ID" \
-              --environment-variables "REACT_APP_API_BASE_URL=$API_URL,REACT_APP_CHAT_ENDPOINT=$API_URL,REACT_APP_HEALTH_ENDPOINT=$API_URL"
+            echo "⚠️ Amplify App ID not found in CDK outputs"
           fi
-          
-          echo "Final Amplify App ID: $AMPLIFY_APP_ID"
-          
-          if [ -z "$AMPLIFY_APP_ID" ] || [ "$AMPLIFY_APP_ID" = "None" ]; then
-            echo "❌ ERROR: Failed to create or find Amplify app"
-            exit 1
-          fi
-          
-          # Create branch if it doesn't exist
-          aws amplify create-branch \
-            --app-id "$AMPLIFY_APP_ID" \
-            --branch-name "$AMPLIFY_BRANCH_NAME" \
-            --stage PRODUCTION \
-            --environment-variables "REACT_APP_API_BASE_URL=$API_URL,REACT_APP_CHAT_ENDPOINT=$API_URL,REACT_APP_HEALTH_ENDPOINT=$API_URL" \
-            --no-cli-pager 2>/dev/null || echo "Branch already exists"
-          
-          # Note: AmplifyDeployer Lambda removed - using direct Amplify deployment
-          echo "✓ Using direct Amplify deployment (no Lambda needed)"
           
           echo ""
           echo "=== Frontend Build and Automated Deployment ==="
@@ -294,13 +205,13 @@ phases:
               # Use direct Amplify deployment (no Lambda needed)
               aws amplify start-deployment \
                 --app-id "$AMPLIFY_APP_ID" \
-                --branch-name "$AMPLIFY_BRANCH_NAME" \
+                --branch-name "main" \
                 --source-url "s3://$BUILDS_BUCKET/$BUILD_KEY" \
                 --region "$CDK_DEFAULT_REGION"
               echo "✅ Direct Amplify deployment started"
               
               echo "🚀 Automated deployment initiated"
-              echo "📱 Amplify App URL: https://$AMPLIFY_BRANCH_NAME.$AMPLIFY_APP_ID.amplifyapp.com"
+              echo "📱 Amplify App URL: https://main.$AMPLIFY_APP_ID.amplifyapp.com"
             else
               echo "⚠️ Builds bucket not found, skipping S3 upload"
             fi
@@ -311,98 +222,20 @@ phases:
           fi
           
           echo ""
-          echo "=== Monitoring Data Source Ingestion ==="
-          
-          # Monitor S3 ingestion job
-          if [ -n "$S3_INGESTION_JOB_ID" ] && [ "$S3_INGESTION_JOB_ID" != "None" ]; then
-            echo "Monitoring S3 ingestion job: $S3_INGESTION_JOB_ID"
-            S3_JOB_STATUS="IN_PROGRESS"
-            WAIT_TIME=0
-            MAX_WAIT=600  # 10 minutes max wait
-            
-            while [ "$S3_JOB_STATUS" = "IN_PROGRESS" ] && [ $WAIT_TIME -lt $MAX_WAIT ]; do
-              sleep 30
-              WAIT_TIME=$((WAIT_TIME + 30))
-              
-              S3_JOB_STATUS=$(aws bedrock-agent get-ingestion-job \
-                --knowledge-base-id "$KB_ID" \
-                --data-source-id "$S3_DS_ID" \
-                --ingestion-job-id "$S3_INGESTION_JOB_ID" \
-                --region "$CDK_DEFAULT_REGION" \
-                --query 'ingestionJob.status' --output text)
-              
-              echo "S3 ingestion status: $S3_JOB_STATUS (waited ${WAIT_TIME}s)"
-            done
-            
-            if [ "$S3_JOB_STATUS" = "COMPLETE" ]; then
-              echo "✅ S3 ingestion completed successfully"
-              
-              # Now start Web Crawler ingestion job after S3 completes
-              if [ -n "$WEB_DS_ID" ] && [ "$WEB_DS_ID" != "None" ]; then
-                echo "Starting Web Crawler ingestion job after S3 completion..."
-                WEB_INGESTION_JOB_ID=$(aws bedrock-agent start-ingestion-job \
-                  --knowledge-base-id "$KB_ID" \
-                  --data-source-id "$WEB_DS_ID" \
-                  --description "Sequential crawling after PDF ingestion" \
-                  --region "$CDK_DEFAULT_REGION" \
-                  --query 'ingestionJob.ingestionJobId' --output text)
-                
-                echo "✓ Web Crawler ingestion job started: $WEB_INGESTION_JOB_ID"
-              else
-                echo "⚠️ Web Data Source not found, skipping Web ingestion"
-                WEB_INGESTION_JOB_ID=""
-              fi
-            else
-              echo "⚠️ S3 ingestion status: $S3_JOB_STATUS (continuing anyway)"
-              WEB_INGESTION_JOB_ID=""
-            fi
-          else
-            echo "⚠️ No S3 ingestion job to monitor"
-            WEB_INGESTION_JOB_ID=""
-          fi
-          
-          # Web ingestion job will be monitored separately if started
-          if [ -n "$WEB_INGESTION_JOB_ID" ] && [ "$WEB_INGESTION_JOB_ID" != "None" ]; then
-            echo "Checking Web Crawler ingestion job: $WEB_INGESTION_JOB_ID"
-            WEB_JOB_STATUS=$(aws bedrock-agent get-ingestion-job \
-              --knowledge-base-id "$KB_ID" \
-              --data-source-id "$WEB_DS_ID" \
-              --ingestion-job-id "$WEB_INGESTION_JOB_ID" \
-              --region "$CDK_DEFAULT_REGION" \
-              --query 'ingestionJob.status' --output text)
-            
-            echo "Web Crawler ingestion status: $WEB_JOB_STATUS"
-            
-            if [ "$WEB_JOB_STATUS" = "IN_PROGRESS" ]; then
-              echo "⏳ Web crawling is in progress (this can take 10-20 minutes)"
-              echo "📊 You can monitor progress in the Bedrock console"
-            elif [ "$WEB_JOB_STATUS" = "COMPLETE" ]; then
-              echo "✅ Web crawling completed successfully"
-            else
-              echo "⚠️ Web crawling status: $WEB_JOB_STATUS"
-            fi
-          else
-            echo "⚠️ No Web ingestion job started yet"
-          fi
-          
-          echo ""
           echo "========================================="
           echo "✅ Deployment Complete!"
           echo "========================================="
           echo "🧠 Knowledge Base ID: $KB_ID"
-          echo "📄 S3 Data Source ID: $S3_DS_ID (PDFs with Bedrock Data Automation)"
-          echo "🌐 Web Crawler Data Source ID: $WEB_DS_ID (Websites)"
-          echo "📁 Documents Bucket: $DOCUMENTS_BUCKET"
+          echo "� SDocuments Bucket: $DOCUMENTS_BUCKET"
           echo "🔍 OpenSearch Endpoint: $OPENSEARCH_ENDPOINT"
-          echo "📊 S3 Ingestion Job ID: $S3_INGESTION_JOB_ID"
-          echo "🕷️ Web Ingestion Job ID: $WEB_INGESTION_JOB_ID"
           echo "🌐 API Gateway URL: $API_URL"
-          echo "📱 Frontend URL: https://$AMPLIFY_BRANCH_NAME.$AMPLIFY_APP_ID.amplifyapp.com"
-          echo "🚀 Deployment Type: Automated via Amplify (no GitHub required)"
+          echo "�  Frontend URL: https://main.$AMPLIFY_APP_ID.amplifyapp.com"
+          echo "� Depnloyment Type: CDK-managed Amplify App"
+          echo "⏰ Daily Sync: Automated at 2 AM UTC via EventBridge + Lambda"
           echo "========================================="
           echo ""
           echo "========================================="
-          echo "🚀 Next Steps"
+          echo "� Neoxt Steps"
           echo "========================================="
           echo "1️⃣ Wait 5-10 minutes for ingestion jobs to complete"
           echo ""
@@ -417,42 +250,25 @@ phases:
           echo "     -d '{\"message\":\"¿Cuántas personas donan sangre?\",\"language\":\"es\"}'"
           echo ""
           echo "4️⃣ Monitor ingestion jobs:"
-          echo "   # S3 Data Source (PDFs):"
-          echo "   aws bedrock-agent get-ingestion-job \\"
+          echo "   aws bedrock-agent list-ingestion-jobs \\"
           echo "     --knowledge-base-id $KB_ID \\"
-          echo "     --data-source-id $S3_DS_ID \\"
-          echo "     --ingestion-job-id $S3_INGESTION_JOB_ID \\"
-          echo "     --region $CDK_DEFAULT_REGION"
-          echo ""
-          echo "   # Web Crawler Data Source:"
-          echo "   aws bedrock-agent get-ingestion-job \\"
-          echo "     --knowledge-base-id $KB_ID \\"
-          echo "     --data-source-id $WEB_DS_ID \\"
-          echo "     --ingestion-job-id $WEB_INGESTION_JOB_ID \\"
           echo "     --region $CDK_DEFAULT_REGION"
           echo ""
           echo "5️⃣ Add more documents:"
-          echo "   # Add PDFs (uses Bedrock Data Automation parser):"
           echo "   aws s3 cp document.pdf s3://$DOCUMENTS_BUCKET/pdfs/"
-          echo "   aws bedrock-agent start-ingestion-job \\"
-          echo "     --knowledge-base-id $KB_ID \\"
-          echo "     --data-source-id $S3_DS_ID \\"
-          echo "     --region $CDK_DEFAULT_REGION"
-          echo ""
-          echo "   # Re-crawl websites (automatic parsing):"
-          echo "   aws bedrock-agent start-ingestion-job \\"
-          echo "     --knowledge-base-id $KB_ID \\"
-          echo "     --data-source-id $WEB_DS_ID \\"
-          echo "     --region $CDK_DEFAULT_REGION"
+          echo "   # Then trigger manual sync via admin dashboard"
           echo ""
           echo "📊 Monitor resources:"
           echo "  • Knowledge Base: https://console.aws.amazon.com/bedrock/home?region=${CDK_DEFAULT_REGION}#/knowledge-bases"
           echo "  • OpenSearch: https://console.aws.amazon.com/aos/home?region=${CDK_DEFAULT_REGION}#opensearch/collections"
           echo "  • S3 Bucket: https://s3.console.aws.amazon.com/s3/buckets/$DOCUMENTS_BUCKET"
+          echo "  • Daily Sync Lambda: https://console.aws.amazon.com/lambda/home?region=${CDK_DEFAULT_REGION}#/functions"
+          echo "  • EventBridge Rules: https://console.aws.amazon.com/events/home?region=${CDK_DEFAULT_REGION}#/rules"
           echo ""
-          echo "💰 Estimated monthly cost: \$8-20 (vs \$20+ for Q Business)"
+          echo "� Estimanted monthly cost: \$8-20 (vs \$20+ for Q Business)"
           echo "🎯 Features: Dual data sources, bilingual support, automatic web crawling, markdown support"
           echo "🚀 Frontend: Automatically deployed to Amplify (no GitHub required)"
+          echo "⏰ Daily Sync: Fully automated - runs daily at 2 AM UTC for fresh blood supply data"
           echo ""
         fi
 

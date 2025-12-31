@@ -10,7 +10,6 @@ import { OpenInNew as OpenInNewIcon } from "@mui/icons-material"
 import { 
   PRIMARY_MAIN,
   SECONDARY_MAIN,
-  WHITE,
   LIGHT_BACKGROUND
 } from "../utilities/constants"
 import MarkdownContent from "./MarkdownContent"

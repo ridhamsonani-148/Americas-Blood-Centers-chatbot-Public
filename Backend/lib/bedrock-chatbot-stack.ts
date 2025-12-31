@@ -649,8 +649,8 @@ export class BedrockChatbotStack extends cdk.Stack {
           },
           crawlerConfiguration: {
             crawlerLimits: {
-              maxPages: 1500, // Maximum pages set to 1500 for daily sync
-              rateLimit: 300, // Fast rate for daily updates
+              maxPages: 20, // Reduced to 20 pages for single website daily sync (cost optimization)
+              rateLimit: 300, // Default rate limit
             },
             exclusionFilters: [
               ".*/wp-admin/.*", 
@@ -670,11 +670,14 @@ export class BedrockChatbotStack extends cdk.Stack {
             breakpointPercentileThreshold: 95,
           },
         },
-        // Use Bedrock Data Automation (BDA) for advanced document parsing
+        // Use default parsing configuration for cost optimization
         parsingConfiguration: {
-          parsingStrategy: "BEDROCK_DATA_AUTOMATION",
-          bedrockDataAutomationConfiguration: {
-            parsingModality: "MULTIMODAL",
+          parsingStrategy: "BEDROCK_FOUNDATION_MODEL",
+          bedrockFoundationModelConfiguration: {
+            modelArn: `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-3-haiku-20240307-v1:0`,
+            parsingPrompt: {
+              parsingPromptText: "Extract and structure the content from this document, focusing on blood donation information, statistics, and guidelines."
+            }
           },
         },
       },
@@ -714,6 +717,70 @@ export class BedrockChatbotStack extends cdk.Stack {
       },
       description: 'America\'s Blood Centers Bedrock Chat Handler',
     });
+
+    // ===== Daily Sync Lambda Function =====
+    const dailySyncLambdaRole = new iam.Role(this, 'DailySyncLambdaRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      ],
+      inlinePolicies: {
+        BedrockAgentAccess: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'bedrock-agent:ListDataSources',
+                'bedrock-agent:StartIngestionJob',
+                'bedrock-agent:GetIngestionJob',
+              ],
+              resources: [
+                `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/${knowledgeBase.attrKnowledgeBaseId}`,
+                `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/${knowledgeBase.attrKnowledgeBaseId}/*`,
+              ],
+            }),
+          ],
+        }),
+      },
+    });
+
+    const dailySyncLambda = new lambda.Function(this, 'DailySyncLambdaFunction', {
+      runtime: lambda.Runtime.PYTHON_3_11,
+      handler: 'daily_sync.lambda_handler',
+      code: lambda.Code.fromAsset('lambda'),
+      role: dailySyncLambdaRole,
+      timeout: cdk.Duration.seconds(60),
+      memorySize: 256,
+      environment: {
+        KNOWLEDGE_BASE_ID: knowledgeBase.attrKnowledgeBaseId,
+      },
+      description: 'Daily Sync Automation for Blood Centers Daily Data Source',
+    });
+
+    // ===== EventBridge Rule for Daily Sync =====
+    const dailySyncRule = new events.Rule(this, 'DailySyncRule', {
+      ruleName: `${projectName}-daily-sync-rule`,
+      description: 'Triggers daily sync of blood centers daily data source at 2 AM UTC',
+      schedule: events.Schedule.cron({ 
+        hour: '2',    // 2 AM UTC
+        minute: '0',  // At the top of the hour
+        day: '*',     // Every day
+        month: '*',   // Every month
+        year: '*'     // Every year
+      }),
+      enabled: true,
+    });
+
+    // Add Lambda as target for EventBridge rule
+    dailySyncRule.addTarget(new targets.LambdaFunction(dailySyncLambda, {
+      event: events.RuleTargetInput.fromObject({
+        source: 'eventbridge.daily-sync',
+        detail: {
+          triggerType: 'scheduled',
+          timestamp: events.EventField.fromPath('$.time'),
+        },
+      }),
+    }));
 
     // ===== API Gateway =====
     const api = new apigateway.RestApi(this, 'ChatApi', {
@@ -770,11 +837,12 @@ export class BedrockChatbotStack extends cdk.Stack {
 
     // Note: Amplify deployment is handled directly in buildspec.yml
     // AmplifyDeployerLambda removed to reduce Lambda function count
-    // Note: Data ingestion is handled directly in buildspec.yml
+    
+    // Note: Data ingestion is handled directly in buildspec.yml for initial deployment
     // DataIngestionLambda removed to reduce Lambda function count
-
-    // Note: Daily sync can be handled via EventBridge + direct API calls if needed
-    // Removed daily sync Lambda to reduce function count
+    
+    // Note: Daily sync is now automated via EventBridge + DailySyncLambda
+    // Runs daily at 2 AM UTC to sync the daily-sync data source only
 
     // ===== Deploy Initial Documents =====
     // Deploy text files to root level (no folder)
@@ -804,6 +872,41 @@ export class BedrockChatbotStack extends cdk.Stack {
     // Grant documents bucket access to chat Lambda only
     documentsBucket.grantReadWrite(chatLambda);
     supplementalBucket.grantReadWrite(chatLambda);
+
+    // ===== Amplify App =====
+    const amplifyApp = new amplify.App(this, 'AmplifyApp', {
+      appName: `${projectName}-chatbot`,
+      description: 'America\'s Blood Centers AI Assistant Frontend',
+      environmentVariables: {
+        'REACT_APP_API_BASE_URL': api.url,
+        'REACT_APP_CHAT_ENDPOINT': api.url,
+        'REACT_APP_HEALTH_ENDPOINT': api.url,
+      },
+      platform: amplify.Platform.WEB,
+      autoBranchCreation: {
+        // Automatically create branches for new pushes
+        autoBuild: true,
+        patterns: ['main', 'develop'],
+      },
+      customRules: [
+        {
+          source: '/<*>',
+          target: '/index.html',
+          status: amplify.RedirectStatus.NOT_FOUND_REWRITE,
+        },
+      ],
+    });
+
+    // Create main branch
+    const mainBranch = amplifyApp.addBranch('main', {
+      branchName: 'main',
+      stage: 'PRODUCTION',
+      environmentVariables: {
+        'REACT_APP_API_BASE_URL': api.url,
+        'REACT_APP_CHAT_ENDPOINT': api.url,
+        'REACT_APP_HEALTH_ENDPOINT': api.url,
+      },
+    });
 
     // ===== Outputs =====
     new cdk.CfnOutput(this, 'ApiGatewayUrl', {
@@ -864,8 +967,30 @@ export class BedrockChatbotStack extends cdk.Stack {
       description: 'Chat Lambda Function Name',
     });
 
+    new cdk.CfnOutput(this, 'DailySyncLambdaFunctionName', {
+      value: dailySyncLambda.functionName,
+      description: 'Daily Sync Lambda Function Name',
+    });
+
+    new cdk.CfnOutput(this, 'DailySyncRuleName', {
+      value: dailySyncRule.ruleName,
+      description: 'EventBridge Daily Sync Rule Name',
+    });
+
+    new cdk.CfnOutput(this, 'AmplifyAppId', {
+      value: amplifyApp.appId,
+      description: 'Amplify App ID',
+    });
+
+    new cdk.CfnOutput(this, 'AmplifyAppUrl', {
+      value: `https://main.${amplifyApp.appId}.amplifyapp.com`,
+      description: 'Amplify App URL',
+    });
+
     // Note: Removed DataIngestionFunctionName and AmplifyDeployerFunctionName outputs
     // These functions were removed to reduce Lambda count
+    // Added DailySyncLambdaFunctionName for automated daily sync monitoring
+    // Added Amplify app creation to CDK for better resource management
 
     new cdk.CfnOutput(this, 'ProjectName', {
       value: projectName,
