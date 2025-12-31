@@ -36,6 +36,14 @@ try:
 except Exception as e:
     logger.warning(f"Could not initialize DynamoDB table {CHAT_HISTORY_TABLE}: {e}")
     chat_table = None
+CHAT_HISTORY_TABLE = os.environ.get('CHAT_HISTORY_TABLE', 'BloodCentersChatHistory')
+
+# Initialize DynamoDB table
+try:
+    chat_table = dynamodb.Table(CHAT_HISTORY_TABLE)
+except Exception as e:
+    logger.warning(f"Could not initialize DynamoDB table {CHAT_HISTORY_TABLE}: {e}")
+    chat_table = None
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
