@@ -11,6 +11,7 @@ from typing import Dict, Any, List
 import boto3
 from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
+import uuid
 
 # Configure logging
 logger = logging.getLogger()
@@ -20,12 +21,21 @@ logger.setLevel(logging.INFO)
 bedrock_runtime = boto3.client('bedrock-runtime')
 bedrock_agent_runtime = boto3.client('bedrock-agent-runtime')
 s3_client = boto3.client('s3')
+dynamodb = boto3.resource('dynamodb')
 
 # Environment variables
 KNOWLEDGE_BASE_ID = os.environ.get('KNOWLEDGE_BASE_ID')
 MODEL_ID = os.environ.get('MODEL_ID', 'anthropic.claude-3-haiku-20240307-v1:0')
 MAX_TOKENS = int(os.environ.get('MAX_TOKENS', '1000'))
 TEMPERATURE = float(os.environ.get('TEMPERATURE', '0.0'))  # Minimum temperature for maximum consistency
+CHAT_HISTORY_TABLE = os.environ.get('CHAT_HISTORY_TABLE', 'BloodCentersChatHistory')
+
+# Initialize DynamoDB table
+try:
+    chat_table = dynamodb.Table(CHAT_HISTORY_TABLE)
+except Exception as e:
+    logger.warning(f"Could not initialize DynamoDB table {CHAT_HISTORY_TABLE}: {e}")
+    chat_table = None
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -41,8 +51,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     }
     
     try:
-        # Get HTTP method
+        # Get HTTP method and path
         http_method = event.get('httpMethod') or event.get('requestContext', {}).get('http', {}).get('method')
+        path = event.get('path', '') or event.get('requestContext', {}).get('http', {}).get('path', '')
         
         # Handle preflight OPTIONS request
         if http_method == 'OPTIONS':
@@ -51,6 +62,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'headers': headers,
                 'body': json.dumps({'message': 'CORS preflight successful'})
             }
+        
+        # Handle admin endpoints
+        if '/admin/' in path:
+            return handle_admin_request(event, headers)
         
         # Handle health check (GET requests)
         if http_method == 'GET':
@@ -89,6 +104,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Extract parameters
         user_message = body.get('message', '').strip()
         language = body.get('language', 'en')
+        session_id = body.get('sessionId', str(uuid.uuid4()))
         
         if not user_message:
             return {
@@ -156,12 +172,17 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Step 4: Add blood center link if asking about donation locations
         sources = add_blood_center_link_if_needed(user_message, sources)
         
+        # Step 5: Save conversation to DynamoDB
+        conversation_id = save_conversation(session_id, user_message, processed_response, language, sources)
+        
         # Prepare final response
         chat_response = {
             "success": True,
             "message": processed_response,
             "sources": sources,
             "timestamp": datetime.utcnow().isoformat(),
+            "conversationId": conversation_id,
+            "sessionId": session_id,
             "metadata": {
                 "sourceCount": len(sources),
                 "responseLength": len(processed_response),
@@ -203,6 +224,209 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'details': str(e) if os.environ.get('DEBUG') == 'true' else None
             })
         }
+
+def handle_admin_request(event: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
+    """
+    Handle admin-specific requests
+    """
+    try:
+        path = event.get('path', '') or event.get('requestContext', {}).get('http', {}).get('path', '')
+        http_method = event.get('httpMethod') or event.get('requestContext', {}).get('http', {}).get('method')
+        
+        # Parse query parameters
+        query_params = event.get('queryStringParameters') or {}
+        
+        if '/admin/conversations' in path and http_method == 'GET':
+            return get_conversations(query_params, headers)
+        elif '/admin/sync' in path and http_method == 'POST':
+            return handle_sync_request(event, headers)
+        elif '/admin/status' in path and http_method == 'GET':
+            return get_system_status(headers)
+        else:
+            return {
+                'statusCode': 404,
+                'headers': headers,
+                'body': json.dumps({
+                    'error': 'Admin endpoint not found',
+                    'success': False
+                })
+            }
+    except Exception as e:
+        logger.error(f"Error handling admin request: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({
+                'error': 'Internal server error',
+                'success': False,
+                'details': str(e) if os.environ.get('DEBUG') == 'true' else None
+            })
+        }
+
+def get_conversations(query_params: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
+    """
+    Get chat conversations with pagination and filtering
+    """
+    try:
+        if not chat_table:
+            return {
+                'statusCode': 503,
+                'headers': headers,
+                'body': json.dumps({
+                    'error': 'Chat history not available',
+                    'success': False
+                })
+            }
+        
+        # Parse query parameters
+        page = int(query_params.get('page', 1))
+        limit = int(query_params.get('limit', 10))
+        date_filter = query_params.get('date')
+        language_filter = query_params.get('language')
+        
+        # Calculate offset
+        offset = (page - 1) * limit
+        
+        # Build scan parameters
+        scan_params = {
+            'Limit': limit + offset,  # We'll slice later for proper pagination
+            'Select': 'ALL_ATTRIBUTES'
+        }
+        
+        # Add filters
+        filter_expressions = []
+        expression_values = {}
+        
+        if date_filter:
+            filter_expressions.append('begins_with(#date, :date)')
+            expression_values[':date'] = date_filter
+            scan_params['ExpressionAttributeNames'] = {'#date': 'date'}
+        
+        if language_filter:
+            filter_expressions.append('#lang = :lang')
+            expression_values[':lang'] = language_filter
+            if 'ExpressionAttributeNames' not in scan_params:
+                scan_params['ExpressionAttributeNames'] = {}
+            scan_params['ExpressionAttributeNames']['#lang'] = 'language'
+        
+        if filter_expressions:
+            scan_params['FilterExpression'] = ' AND '.join(filter_expressions)
+            scan_params['ExpressionAttributeValues'] = expression_values
+        
+        # Scan the table
+        response = chat_table.scan(**scan_params)
+        items = response.get('Items', [])
+        
+        # Sort by timestamp (newest first)
+        items.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        
+        # Apply pagination
+        paginated_items = items[offset:offset + limit]
+        
+        # Format conversations for frontend
+        conversations = []
+        for item in paginated_items:
+            conversations.append({
+                'id': item.get('conversation_id'),
+                'sessionId': item.get('session_id'),
+                'message': item.get('question', ''),
+                'question': item.get('question', ''),
+                'response': item.get('answer', ''),
+                'answer': item.get('answer', ''),
+                'timestamp': item.get('timestamp'),
+                'created_at': item.get('timestamp'),
+                'date': item.get('date'),
+                'language': item.get('language', 'en'),
+                'sources': item.get('sources', [])
+            })
+        
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({
+                'success': True,
+                'conversations': conversations,
+                'total': len(items),
+                'page': page,
+                'limit': limit,
+                'hasMore': len(items) > offset + limit
+            })
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting conversations: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({
+                'error': 'Failed to retrieve conversations',
+                'success': False,
+                'details': str(e) if os.environ.get('DEBUG') == 'true' else None
+            })
+        }
+
+def handle_sync_request(event: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
+    """
+    Handle data sync requests (existing functionality)
+    """
+    # This is your existing sync functionality
+    return {
+        'statusCode': 200,
+        'headers': headers,
+        'body': json.dumps({
+            'success': True,
+            'message': 'Sync request received'
+        })
+    }
+
+def get_system_status(headers: Dict[str, str]) -> Dict[str, Any]:
+    """
+    Get system status (existing functionality)
+    """
+    return {
+        'statusCode': 200,
+        'headers': headers,
+        'body': json.dumps({
+            'success': True,
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'model': MODEL_ID,
+            'knowledge_base': KNOWLEDGE_BASE_ID
+        })
+    }
+
+def save_conversation(session_id: str, question: str, answer: str, language: str, sources: List[Dict[str, Any]]) -> str:
+    """
+    Save conversation to DynamoDB
+    """
+    try:
+        if not chat_table:
+            logger.warning("Chat table not available, skipping conversation save")
+            return str(uuid.uuid4())
+        
+        conversation_id = str(uuid.uuid4())
+        timestamp = datetime.utcnow().isoformat()
+        date = datetime.utcnow().strftime('%Y-%m-%d')
+        
+        item = {
+            'conversation_id': conversation_id,
+            'session_id': session_id,
+            'timestamp': timestamp,
+            'date': date,
+            'question': question,
+            'answer': answer,
+            'language': language,
+            'sources': sources,
+            'ttl': int((datetime.utcnow() + timedelta(days=90)).timestamp())  # Auto-delete after 90 days
+        }
+        
+        chat_table.put_item(Item=item)
+        logger.info(f"Saved conversation {conversation_id} to DynamoDB")
+        return conversation_id
+        
+    except Exception as e:
+        logger.error(f"Error saving conversation: {str(e)}")
+        return str(uuid.uuid4())  # Return a UUID even if save fails
 
 def generate_presigned_url(s3_uri: str) -> str:
     """

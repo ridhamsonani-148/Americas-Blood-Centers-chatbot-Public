@@ -7,6 +7,7 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as bedrock from 'aws-cdk-lib/aws-bedrock';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as os from 'os';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as amplify from '@aws-cdk/aws-amplify-alpha';
@@ -77,6 +78,102 @@ export class BedrockChatbotStack extends cdk.Stack {
       versioned: false,
       publicReadAccess: false,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+    });
+
+    // ===== DynamoDB Table for Chat History =====
+    const chatHistoryTable = new dynamodb.Table(this, 'ChatHistoryTable', {
+      tableName: `${projectName}-chat-history-${this.account}-${this.region}`,
+      partitionKey: { name: 'conversation_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'timestamp', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      timeToLiveAttribute: 'ttl',
+      pointInTimeRecovery: false, // Disabled for cost optimization
+    });
+
+    // Add GSI for querying by date and language
+    chatHistoryTable.addGlobalSecondaryIndex({
+      indexName: 'date-timestamp-index',
+      partitionKey: { name: 'date', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'timestamp', type: dynamodb.AttributeType.STRING },
+    });
+
+    chatHistoryTable.addGlobalSecondaryIndex({
+      indexName: 'session-timestamp-index',
+      partitionKey: { name: 'session_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'timestamp', type: dynamodb.AttributeType.STRING },
+    });
+
+    // ===== Lambda Role for Chat Function =====
+    const chatLambdaRole = new iam.Role(this, 'ChatLambdaRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      description: 'Role for Chat Lambda function to access Bedrock, S3, and DynamoDB',
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      ],
+      inlinePolicies: {
+        ChatLambdaPolicy: new iam.PolicyDocument({
+          statements: [
+            // Bedrock permissions
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'bedrock:InvokeModel',
+                'bedrock-runtime:InvokeModel',
+              ],
+              resources: [
+                `arn:aws:bedrock:${this.region}::foundation-model/${modelId}`,
+                `arn:aws:bedrock:${this.region}::foundation-model/${embeddingModelId}`,
+              ],
+            }),
+            // Bedrock Agent Runtime permissions
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'bedrock-agent-runtime:Retrieve',
+                'bedrock-agent-runtime:RetrieveAndGenerate',
+              ],
+              resources: [
+                `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`,
+              ],
+            }),
+            // S3 permissions for documents
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                's3:GetObject',
+                's3:PutObject',
+                's3:DeleteObject',
+                's3:ListBucket',
+                's3:GetBucketLocation',
+                's3:GeneratePresignedUrl',
+              ],
+              resources: [
+                documentsBucket.bucketArn,
+                `${documentsBucket.bucketArn}/*`,
+                supplementalBucket.bucketArn,
+                `${supplementalBucket.bucketArn}/*`,
+              ],
+            }),
+            // DynamoDB permissions for chat history
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'dynamodb:PutItem',
+                'dynamodb:GetItem',
+                'dynamodb:UpdateItem',
+                'dynamodb:DeleteItem',
+                'dynamodb:Query',
+                'dynamodb:Scan',
+              ],
+              resources: [
+                chatHistoryTable.tableArn,
+                `${chatHistoryTable.tableArn}/index/*`,
+              ],
+            }),
+          ],
+        }),
+      },
     });
 
     // Grant Amplify service access to builds bucket (critical for deployment)
@@ -603,7 +700,7 @@ export class BedrockChatbotStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'lambda_function.lambda_handler',
       code: lambda.Code.fromAsset('lambda'),
-      role: lambdaRole,
+      role: chatLambdaRole,
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
       environment: {
@@ -613,6 +710,7 @@ export class BedrockChatbotStack extends cdk.Stack {
         MAX_TOKENS: '1000', // Increased for better responses with Claude Sonnet
         TEMPERATURE: '0.1',
         DOCUMENTS_BUCKET: documentsBucket.bucketName,
+        CHAT_HISTORY_TABLE: chatHistoryTable.tableName,
       },
       description: 'America\'s Blood Centers Bedrock Chat Handler',
     });
@@ -654,6 +752,21 @@ export class BedrockChatbotStack extends cdk.Stack {
     // Add health check endpoint
     const healthResource = api.root.addResource('health');
     healthResource.addMethod('GET', chatIntegration);
+
+    // Add admin endpoints
+    const adminResource = api.root.addResource('admin');
+    
+    // Admin conversations endpoint
+    const conversationsResource = adminResource.addResource('conversations');
+    conversationsResource.addMethod('GET', chatIntegration);
+    
+    // Admin sync endpoint
+    const syncResource = adminResource.addResource('sync');
+    syncResource.addMethod('POST', chatIntegration);
+    
+    // Admin status endpoint
+    const statusResource = adminResource.addResource('status');
+    statusResource.addMethod('GET', chatIntegration);
 
     // Note: Amplify deployment is handled directly in buildspec.yml
     // AmplifyDeployerLambda removed to reduce Lambda function count
@@ -711,6 +824,11 @@ export class BedrockChatbotStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'BuildsBucketName', {
       value: buildsBucket.bucketName,
       description: 'S3 Frontend Builds Bucket Name',
+    });
+
+    new cdk.CfnOutput(this, 'ChatHistoryTableName', {
+      value: chatHistoryTable.tableName,
+      description: 'DynamoDB Chat History Table Name',
     });
 
     new cdk.CfnOutput(this, 'OpenSearchCollectionEndpoint', {
