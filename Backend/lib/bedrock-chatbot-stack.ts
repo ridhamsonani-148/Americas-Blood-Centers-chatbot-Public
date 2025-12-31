@@ -124,6 +124,15 @@ export class BedrockChatbotStack extends cdk.Stack {
               resources: [
                 `arn:aws:bedrock:${this.region}::foundation-model/${modelId}`,
                 `arn:aws:bedrock:${this.region}::foundation-model/${embeddingModelId}`,
+                // Support for all foundation models in current region
+                `arn:aws:bedrock:${this.region}::foundation-model/*`,
+                // Support for cross-region foundation models (needed for inference profiles)
+                `arn:aws:bedrock:*::foundation-model/*`,
+                // Support for inference profiles (global models)
+                `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/*`,
+                `arn:aws:bedrock:*:${this.account}:inference-profile/*`,
+                // Support for cross-region inference profiles (global profiles)
+                `arn:aws:bedrock:*::inference-profile/*`,
               ],
             }),
             // Bedrock Agent Runtime permissions
@@ -703,7 +712,7 @@ export class BedrockChatbotStack extends cdk.Stack {
     const chatLambda = new lambda.Function(this, 'ChatLambdaFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'lambda_function.lambda_handler',
-      code: lambda.Code.fromAsset('chat-lambda'),  // Separate directory for chat Lambda
+      code: lambda.Code.fromAsset('lambda/chat-lambda'),  // Use chat-lambda subdirectory in lambda folder
       role: chatLambdaRole,
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
@@ -748,7 +757,7 @@ export class BedrockChatbotStack extends cdk.Stack {
     const dailySyncLambda = new lambda.Function(this, 'DailySyncLambdaFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'daily_sync.lambda_handler',
-      code: lambda.Code.fromAsset('daily-sync-lambda'),  // Separate directory for daily sync Lambda
+      code: lambda.Code.fromAsset('lambda/daily-sync-lambda'),  // Use daily-sync-lambda subdirectory in lambda folder
       role: dailySyncLambdaRole,
       timeout: cdk.Duration.seconds(60),
       memorySize: 256,

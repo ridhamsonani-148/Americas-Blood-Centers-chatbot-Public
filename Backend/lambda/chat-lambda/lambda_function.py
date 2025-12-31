@@ -12,6 +12,7 @@ import boto3
 from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
 import uuid
+from decimal import Decimal
 
 # Configure logging
 logger = logging.getLogger()
@@ -417,7 +418,7 @@ def save_conversation(session_id: str, question: str, answer: str, language: str
             'answer': answer,
             'language': language,
             'sources': sources,
-            'ttl': int((datetime.utcnow() + timedelta(days=90)).timestamp())  # Auto-delete after 90 days
+            'ttl': Decimal(str(int((datetime.utcnow() + timedelta(days=90)).timestamp())))  # Auto-delete after 90 days
         }
         
         chat_table.put_item(Item=item)
