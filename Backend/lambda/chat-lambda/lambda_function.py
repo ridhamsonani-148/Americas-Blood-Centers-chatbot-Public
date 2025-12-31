@@ -661,13 +661,10 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
         # Create a unique key for the document (filename-based)
         doc_key = None
         
-        # Extract filename for deduplication key
-        if 's3://' in source['uri'] or 'amazonaws.com' in source['url']:
-            # S3 document - extract filename
-            if 's3://' in source['uri']:
-                doc_key = source['uri'].split('/')[-1].lower()
-            else:
-                doc_key = source['url'].split('/')[-1].split('?')[0].lower()  # Remove query params
+        # Extract filename for deduplication key using only the URL
+        if 'amazonaws.com' in source['url']:
+            # S3 presigned URL - extract filename
+            doc_key = source['url'].split('/')[-1].split('?')[0].lower()  # Remove query params
         else:
             # Web URL - extract filename from URL
             try:
@@ -688,8 +685,8 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
             existing_source = seen_documents[doc_key]
             
             # Prefer public web URLs over S3 presigned URLs
-            is_current_public = not ('amazonaws.com' in source['url'] or 's3://' in source['uri'])
-            is_existing_s3 = 'amazonaws.com' in existing_source['url'] or 's3://' in existing_source['uri']
+            is_current_public = not ('amazonaws.com' in source['url'])
+            is_existing_s3 = 'amazonaws.com' in existing_source['url']
             
             if is_current_public and is_existing_s3:
                 # Replace S3 URL with public URL
