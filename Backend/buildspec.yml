@@ -242,16 +242,8 @@ phases:
             --environment-variables "REACT_APP_API_BASE_URL=$API_URL,REACT_APP_CHAT_ENDPOINT=$API_URL,REACT_APP_HEALTH_ENDPOINT=$API_URL" \
             --no-cli-pager 2>/dev/null || echo "Branch already exists"
           
-          # Update AmplifyDeployer Lambda with app details
-          AMPLIFY_DEPLOYER_FUNCTION_NAME=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.AmplifyDeployerFunctionName // empty')
-          
-          if [ -n "$AMPLIFY_DEPLOYER_FUNCTION_NAME" ] && [ "$AMPLIFY_DEPLOYER_FUNCTION_NAME" != "empty" ]; then
-            aws lambda update-function-configuration \
-              --function-name "$AMPLIFY_DEPLOYER_FUNCTION_NAME" \
-              --environment "Variables={AMPLIFY_APP_ID=$AMPLIFY_APP_ID,AMPLIFY_BRANCH_NAME=$AMPLIFY_BRANCH_NAME}" \
-              --region "$CDK_DEFAULT_REGION"
-            echo "✓ AmplifyDeployer Lambda updated"
-          fi
+          # Note: AmplifyDeployer Lambda removed - using direct Amplify deployment
+          echo "✓ Using direct Amplify deployment (no Lambda needed)"
           
           echo ""
           echo "=== Frontend Build and Automated Deployment ==="
@@ -299,25 +291,13 @@ phases:
               aws s3 cp build.zip "s3://$BUILDS_BUCKET/$BUILD_KEY"
               echo "✅ Build artifact uploaded to S3: $BUILD_KEY"
               
-              # Trigger deployment via AmplifyDeployer Lambda if available
-              if [ -n "$AMPLIFY_DEPLOYER_FUNCTION_NAME" ] && [ "$AMPLIFY_DEPLOYER_FUNCTION_NAME" != "empty" ]; then
-                DEPLOY_PAYLOAD='{"bucket":"'$BUILDS_BUCKET'","key":"'$BUILD_KEY'"}'
-                aws lambda invoke \
-                  --function-name "$AMPLIFY_DEPLOYER_FUNCTION_NAME" \
-                  --payload "$DEPLOY_PAYLOAD" \
-                  --cli-binary-format raw-in-base64-out \
-                  --region "$CDK_DEFAULT_REGION" \
-                  /tmp/deploy_response.json
-                echo "✅ Deployment triggered via Lambda"
-              else
-                # Fallback: Direct Amplify deployment
-                aws amplify start-deployment \
-                  --app-id "$AMPLIFY_APP_ID" \
-                  --branch-name "$AMPLIFY_BRANCH_NAME" \
-                  --source-url "s3://$BUILDS_BUCKET/$BUILD_KEY" \
-                  --region "$CDK_DEFAULT_REGION"
-                echo "✅ Direct Amplify deployment started"
-              fi
+              # Use direct Amplify deployment (no Lambda needed)
+              aws amplify start-deployment \
+                --app-id "$AMPLIFY_APP_ID" \
+                --branch-name "$AMPLIFY_BRANCH_NAME" \
+                --source-url "s3://$BUILDS_BUCKET/$BUILD_KEY" \
+                --region "$CDK_DEFAULT_REGION"
+              echo "✅ Direct Amplify deployment started"
               
               echo "🚀 Automated deployment initiated"
               echo "📱 Amplify App URL: https://$AMPLIFY_BRANCH_NAME.$AMPLIFY_APP_ID.amplifyapp.com"
@@ -356,14 +336,32 @@ phases:
             
             if [ "$S3_JOB_STATUS" = "COMPLETE" ]; then
               echo "✅ S3 ingestion completed successfully"
+              
+              # Now start Web Crawler ingestion job after S3 completes
+              if [ -n "$WEB_DS_ID" ] && [ "$WEB_DS_ID" != "None" ]; then
+                echo "Starting Web Crawler ingestion job after S3 completion..."
+                WEB_INGESTION_JOB_ID=$(aws bedrock-agent start-ingestion-job \
+                  --knowledge-base-id "$KB_ID" \
+                  --data-source-id "$WEB_DS_ID" \
+                  --description "Sequential crawling after PDF ingestion" \
+                  --region "$CDK_DEFAULT_REGION" \
+                  --query 'ingestionJob.ingestionJobId' --output text)
+                
+                echo "✓ Web Crawler ingestion job started: $WEB_INGESTION_JOB_ID"
+              else
+                echo "⚠️ Web Data Source not found, skipping Web ingestion"
+                WEB_INGESTION_JOB_ID=""
+              fi
             else
               echo "⚠️ S3 ingestion status: $S3_JOB_STATUS (continuing anyway)"
+              WEB_INGESTION_JOB_ID=""
             fi
           else
             echo "⚠️ No S3 ingestion job to monitor"
+            WEB_INGESTION_JOB_ID=""
           fi
           
-          # Monitor Web Crawler ingestion job (shorter wait since it takes longer)
+          # Web ingestion job will be monitored separately if started
           if [ -n "$WEB_INGESTION_JOB_ID" ] && [ "$WEB_INGESTION_JOB_ID" != "None" ]; then
             echo "Checking Web Crawler ingestion job: $WEB_INGESTION_JOB_ID"
             WEB_JOB_STATUS=$(aws bedrock-agent get-ingestion-job \
@@ -384,7 +382,7 @@ phases:
               echo "⚠️ Web crawling status: $WEB_JOB_STATUS"
             fi
           else
-            echo "⚠️ No Web ingestion job to monitor"
+            echo "⚠️ No Web ingestion job started yet"
           fi
           
           echo ""

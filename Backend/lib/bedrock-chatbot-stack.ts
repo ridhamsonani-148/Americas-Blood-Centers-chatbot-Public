@@ -655,154 +655,13 @@ export class BedrockChatbotStack extends cdk.Stack {
     const healthResource = api.root.addResource('health');
     healthResource.addMethod('GET', chatIntegration);
 
-    // ===== Amplify Deployer Lambda =====
-    const amplifyDeployerRole = new iam.Role(this, 'AmplifyDeployerRole', {
-      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-      managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
-      ],
-      inlinePolicies: {
-        AmplifyDeployerPolicy: new iam.PolicyDocument({
-          statements: [
-            // Amplify access for deployment
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'amplify:StartDeployment',
-                'amplify:GetDeployment',
-                'amplify:ListDeployments',
-                'amplify:GetApp',
-                'amplify:GetBranch',
-                'amplify:ListApps',
-                'amplify:ListBranches',
-                'amplify:CreateDeployment',
-                'amplify:UpdateApp',
-                'amplify:UpdateBranch',
-                // Additional permissions that might be needed for deployment
-                'amplify:StartJob',
-                'amplify:StopJob',
-                'amplify:GetJob',
-                'amplify:ListJobs',
-              ],
-              resources: [
-                '*', // Amplify resources are dynamic, so we need wildcard
-              ],
-            }),
-            // S3 access for build artifacts
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                's3:GetObject',
-                's3:GetObjectVersion',
-                's3:GetObjectAcl',
-                's3:GetObjectVersionAcl',
-                's3:PutObjectAcl',
-                's3:PutObjectVersionAcl',
-                's3:ListBucket',
-                's3:GetBucketAcl',
-                's3:GetBucketLocation',
-                's3:GetBucketVersioning',
-                's3:PutBucketAcl',
-                's3:ListBucketVersions',
-                's3:GetBucketPolicy',
-                's3:GetBucketPolicyStatus',
-                's3:GetBucketPublicAccessBlock',
-                's3:GetEncryptionConfiguration',
-              ],
-              resources: [
-                buildsBucket.bucketArn,
-                `${buildsBucket.bucketArn}/*`,
-              ],
-            }),
-            // Additional IAM permissions that might be needed
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'iam:PassRole',
-                'iam:GetRole',
-                'iam:ListRoles',
-              ],
-              resources: [
-                `arn:aws:iam::${this.account}:role/amplifyconsole-*`,
-                `arn:aws:iam::${this.account}:role/amplify-*`,
-                `arn:aws:iam::${this.account}:role/service-role/amplifyconsole-*`,
-              ],
-            }),
-            // CloudWatch Logs permissions (Amplify might need this)
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'logs:CreateLogGroup',
-                'logs:CreateLogStream',
-                'logs:PutLogEvents',
-                'logs:DescribeLogGroups',
-                'logs:DescribeLogStreams',
-              ],
-              resources: [
-                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/amplify/*`,
-              ],
-            }),
-          ],
-        }),
-      },
-    });
+    // Note: Amplify deployment is handled directly in buildspec.yml
+    // AmplifyDeployerLambda removed to reduce Lambda function count
+    // Note: Data ingestion is handled directly in buildspec.yml
+    // DataIngestionLambda removed to reduce Lambda function count
 
-    const amplifyDeployerLambda = new lambda.Function(this, 'AmplifyDeployerFunction', {
-      runtime: lambda.Runtime.PYTHON_3_11,
-      handler: 'amplify_deployer.lambda_handler',
-      code: lambda.Code.fromAsset('lambda'),
-      role: amplifyDeployerRole,
-      timeout: cdk.Duration.minutes(5),
-      memorySize: 256,
-      environment: {
-        AMPLIFY_BRANCH_NAME: 'main',
-      },
-      description: 'Automated Amplify deployment handler',
-    });
-
-    // Add explicit dependency to ensure Lambda is fully ready
-    amplifyDeployerLambda.node.addDependency(buildsBucket);
-    const dataIngestionLambda = new lambda.Function(this, 'DataIngestionFunction', {
-      runtime: lambda.Runtime.PYTHON_3_11,
-      handler: 'data_ingestion.lambda_handler',
-      code: lambda.Code.fromAsset('lambda'),
-      role: dataIngestionRole,
-      timeout: cdk.Duration.minutes(15),
-      memorySize: 1024,
-      environment: {
-        DOCUMENTS_BUCKET: documentsBucket.bucketName,
-      },
-      description: 'Data ingestion and Knowledge Base management',
-    });
-
-    // Grant S3 permissions to data ingestion lambda
-    documentsBucket.grantReadWrite(dataIngestionLambda);
-
-    // ===== Daily Sync Schedule =====
-    const dailySyncRule = new events.Rule(this, 'DailyDataSyncRule', {
-      schedule: events.Schedule.cron({
-        minute: '0',
-        hour: '19', // 7 PM UTC = 2 PM EST
-        day: '*',
-        month: '*',
-        year: '*',
-      }),
-      description: 'Trigger daily data ingestion for blood supply status',
-    });
-
-    dailySyncRule.addTarget(
-      new targets.LambdaFunction(dataIngestionLambda, {
-        event: events.RuleTargetInput.fromObject({
-          sync_type: 'daily',
-          urls: ['https://americasblood.org/for-donors/americas-blood-supply/'],
-        }),
-      })
-    );
-
-    dataIngestionLambda.addPermission('AllowEventBridgeInvoke', {
-      principal: new iam.ServicePrincipal('events.amazonaws.com'),
-      sourceArn: dailySyncRule.ruleArn,
-    });
+    // Note: Daily sync can be handled via EventBridge + direct API calls if needed
+    // Removed daily sync Lambda to reduce function count
 
     // ===== Deploy Initial Documents =====
     // Deploy text files to root level (no folder)
@@ -827,12 +686,11 @@ export class BedrockChatbotStack extends cdk.Stack {
 
     // Update Lambda environment variables with actual Knowledge Base ID
     chatLambda.addEnvironment('KNOWLEDGE_BASE_ID', knowledgeBase.attrKnowledgeBaseId);
-    dataIngestionLambda.addEnvironment('KNOWLEDGE_BASE_ID', knowledgeBase.attrKnowledgeBaseId);
     // Note: Data source IDs will be discovered dynamically in buildspec.yml
 
-    // Grant documents bucket access to data ingestion Lambda
-    documentsBucket.grantReadWrite(dataIngestionLambda);
-    supplementalBucket.grantReadWrite(dataIngestionLambda);
+    // Grant documents bucket access to chat Lambda only
+    documentsBucket.grantReadWrite(chatLambda);
+    supplementalBucket.grantReadWrite(chatLambda);
 
     // ===== Outputs =====
     new cdk.CfnOutput(this, 'ApiGatewayUrl', {
@@ -888,15 +746,8 @@ export class BedrockChatbotStack extends cdk.Stack {
       description: 'Chat Lambda Function Name',
     });
 
-    new cdk.CfnOutput(this, 'DataIngestionFunctionName', {
-      value: dataIngestionLambda.functionName,
-      description: 'Data Ingestion Lambda Function Name',
-    });
-
-    new cdk.CfnOutput(this, 'AmplifyDeployerFunctionName', {
-      value: amplifyDeployerLambda.functionName,
-      description: 'Amplify Deployer Lambda Function Name',
-    });
+    // Note: Removed DataIngestionFunctionName and AmplifyDeployerFunctionName outputs
+    // These functions were removed to reduce Lambda count
 
     new cdk.CfnOutput(this, 'ProjectName', {
       value: projectName,
