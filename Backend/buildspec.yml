@@ -17,8 +17,8 @@ phases:
       - npm run build
       - echo "✅ TypeScript build completed"
       - echo "=== Installing Lambda dependencies ==="
-      - cd chat-lambda && pip install -r requirements.txt -t . && cd ..
-      - cd daily-sync-lambda && pip install -r requirements.txt -t . && cd ..
+      - cd lambda/chat-lambda && pip install -r requirements.txt -t . && cd ../..
+      - cd lambda/daily-sync-lambda && pip install -r requirements.txt -t . && cd ../..
       - echo "✅ Lambda dependencies installed"
       - echo "=== Bootstrapping CDK Environment ==="
       - |
