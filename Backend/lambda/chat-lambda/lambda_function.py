@@ -651,7 +651,7 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
                 "url": accessible_url,  # Use presigned URL for accessibility
                 "uri": source_url,  # Keep original URI for reference
                 "type": "DOCUMENT" if is_document else "WEB",
-                "score": result.get('score', 0)
+                "score": Decimal(str(result.get('score', 0)))
             })
             
             logger.info(f"Extracted source: {source_title} - {accessible_url[:100]}...")
@@ -732,7 +732,7 @@ def add_blood_center_link_if_needed(user_message: str, sources: List[Dict[str, A
             "title": "Blood Center Locator - Find a Donation Location Near You",
             "url": blood_center_url,
             "type": "WEB",
-            "score": 1.0
+            "score": Decimal("1.0")
         })
         logger.info("Added blood center locator link for location question")
     
