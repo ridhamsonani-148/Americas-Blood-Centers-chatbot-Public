@@ -17,7 +17,8 @@ phases:
       - npm run build
       - echo "✅ TypeScript build completed"
       - echo "=== Installing Lambda dependencies ==="
-      - cd lambda && pip install -r requirements.txt -t . && cd ..
+      - cd chat-lambda && pip install -r requirements.txt -t . && cd ..
+      - cd daily-sync-lambda && pip install -r requirements.txt -t . && cd ..
       - echo "✅ Lambda dependencies installed"
       - echo "=== Bootstrapping CDK Environment ==="
       - |
@@ -93,10 +94,10 @@ phases:
           echo ""
           echo "=== Starting Knowledge Base Ingestion ==="
           
-          # Start ingestion for all data sources automatically
-          echo "Starting ingestion jobs for all data sources..."
+          # Start ingestion for all data sources sequentially (not parallel)
+          echo "Starting ingestion jobs for all data sources sequentially..."
           
-          # Get all data sources and start ingestion jobs
+          # Get all data sources
           DATA_SOURCES=$(aws bedrock-agent list-data-sources \
             --knowledge-base-id "$KB_ID" \
             --region "$CDK_DEFAULT_REGION" \
@@ -106,8 +107,11 @@ phases:
           echo "Found data sources:"
           echo "$DATA_SOURCES" | jq -r '.[] | "  📄 \(.name) (ID: \(.id))"'
           
-          # Start ingestion jobs for each data source
+          # Start ingestion jobs sequentially with proper waits
           INGESTION_JOBS=""
+          TOTAL_SOURCES=$(echo "$DATA_SOURCES" | jq length)
+          CURRENT=0
+          
           for row in $(echo "$DATA_SOURCES" | jq -r '.[] | @base64'); do
             _jq() {
               echo ${row} | base64 --decode | jq -r ${1}
@@ -115,13 +119,15 @@ phases:
             
             DS_NAME=$(_jq '.name')
             DS_ID=$(_jq '.id')
+            CURRENT=$((CURRENT + 1))
             
-            echo "🚀 Starting ingestion job for: $DS_NAME"
+            echo ""
+            echo "🚀 Starting ingestion job $CURRENT/$TOTAL_SOURCES: $DS_NAME"
             
             JOB_ID=$(aws bedrock-agent start-ingestion-job \
               --knowledge-base-id "$KB_ID" \
               --data-source-id "$DS_ID" \
-              --description "Initial deployment ingestion of $DS_NAME" \
+              --description "Sequential deployment ingestion of $DS_NAME" \
               --region "$CDK_DEFAULT_REGION" \
               --query 'ingestionJob.ingestionJobId' \
               --output text 2>/dev/null)
@@ -129,18 +135,34 @@ phases:
             if [ -n "$JOB_ID" ] && [ "$JOB_ID" != "None" ]; then
               echo "✅ Started ingestion job: $JOB_ID"
               INGESTION_JOBS="$INGESTION_JOBS$DS_NAME: $JOB_ID\n"
+              
+              # Wait for job to start properly before starting next one
+              echo "⏳ Waiting 30 seconds before starting next job..."
+              sleep 30
+              
+              # Check job status
+              JOB_STATUS=$(aws bedrock-agent get-ingestion-job \
+                --knowledge-base-id "$KB_ID" \
+                --data-source-id "$DS_ID" \
+                --ingestion-job-id "$JOB_ID" \
+                --region "$CDK_DEFAULT_REGION" \
+                --query 'ingestionJob.status' \
+                --output text 2>/dev/null || echo "UNKNOWN")
+              
+              echo "📊 Job status: $JOB_STATUS"
+              
             else
               echo "⚠️ Failed to start ingestion job for $DS_NAME"
             fi
-            
-            # Wait a bit between jobs to avoid overwhelming the system
-            sleep 5
           done
           
           if [ -n "$INGESTION_JOBS" ]; then
             echo ""
             echo "📊 Started ingestion jobs:"
             echo -e "$INGESTION_JOBS"
+            echo ""
+            echo "⏳ Note: Ingestion jobs will continue running in background"
+            echo "📊 Monitor progress in AWS Bedrock console"
           fi
           
           echo ""

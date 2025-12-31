@@ -130,6 +130,7 @@ export class BedrockChatbotStack extends cdk.Stack {
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
               actions: [
+                'bedrock:Retrieve',
                 'bedrock-agent-runtime:Retrieve',
                 'bedrock-agent-runtime:RetrieveAndGenerate',
               ],
@@ -702,7 +703,7 @@ export class BedrockChatbotStack extends cdk.Stack {
     const chatLambda = new lambda.Function(this, 'ChatLambdaFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'lambda_function.lambda_handler',
-      code: lambda.Code.fromAsset('lambda'),
+      code: lambda.Code.fromAsset('chat-lambda'),  // Separate directory for chat Lambda
       role: chatLambdaRole,
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
@@ -747,7 +748,7 @@ export class BedrockChatbotStack extends cdk.Stack {
     const dailySyncLambda = new lambda.Function(this, 'DailySyncLambdaFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'daily_sync.lambda_handler',
-      code: lambda.Code.fromAsset('lambda'),
+      code: lambda.Code.fromAsset('daily-sync-lambda'),  // Separate directory for daily sync Lambda
       role: dailySyncLambdaRole,
       timeout: cdk.Duration.seconds(60),
       memorySize: 256,
@@ -813,27 +814,20 @@ export class BedrockChatbotStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(29),
     });
 
+    // Main chat endpoints
     api.root.addMethod('POST', chatIntegration);
     api.root.addMethod('GET', chatIntegration);
 
-    // Add health check endpoint
+    // Use proxy integration for all admin routes (simpler than individual resources)
+    const adminResource = api.root.addResource('admin');
+    adminResource.addProxy({
+      defaultIntegration: chatIntegration,
+      anyMethod: true,
+    });
+
+    // Health check endpoint
     const healthResource = api.root.addResource('health');
     healthResource.addMethod('GET', chatIntegration);
-
-    // Add admin endpoints
-    const adminResource = api.root.addResource('admin');
-    
-    // Admin conversations endpoint
-    const conversationsResource = adminResource.addResource('conversations');
-    conversationsResource.addMethod('GET', chatIntegration);
-    
-    // Admin sync endpoint
-    const syncResource = adminResource.addResource('sync');
-    syncResource.addMethod('POST', chatIntegration);
-    
-    // Admin status endpoint
-    const statusResource = adminResource.addResource('status');
-    statusResource.addMethod('GET', chatIntegration);
 
     // Note: Amplify deployment is handled directly in buildspec.yml
     // AmplifyDeployerLambda removed to reduce Lambda function count
