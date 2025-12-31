@@ -136,7 +136,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             retrievalQuery={'text': user_message},
             retrievalConfiguration={
                 'vectorSearchConfiguration': {
-                    'numberOfResults': 50,  # Increased to 50 for more comprehensive results
+                    'numberOfResults': 20,  
                     'overrideSearchType': 'SEMANTIC'  # Use semantic search only
                 }
             }
@@ -335,7 +335,8 @@ def get_conversations(query_params: Dict[str, Any], headers: Dict[str, str]) -> 
         # Format conversations for frontend
         conversations = []
         for item in paginated_items:
-            conversations.append({
+            # Convert Decimal objects to regular Python types for JSON serialization
+            conversation = {
                 'id': item.get('conversation_id'),
                 'sessionId': item.get('session_id'),
                 'message': item.get('question', ''),
@@ -347,7 +348,14 @@ def get_conversations(query_params: Dict[str, Any], headers: Dict[str, str]) -> 
                 'date': item.get('date'),
                 'language': item.get('language', 'en'),
                 'sources': item.get('sources', [])
-            })
+            }
+            
+            # Convert any Decimal objects to int/float for JSON serialization
+            for key, value in conversation.items():
+                if hasattr(value, '__class__') and 'Decimal' in str(value.__class__):
+                    conversation[key] = int(value) if value % 1 == 0 else float(value)
+            
+            conversations.append(conversation)
         
         return {
             'statusCode': 200,
