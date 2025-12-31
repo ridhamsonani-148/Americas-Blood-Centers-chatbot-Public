@@ -12,7 +12,6 @@ import boto3
 from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
 import uuid
-from decimal import Decimal
 
 # Configure logging
 logger = logging.getLogger()
@@ -418,7 +417,7 @@ def save_conversation(session_id: str, question: str, answer: str, language: str
             'answer': answer,
             'language': language,
             'sources': sources,
-            'ttl': Decimal(str(int((datetime.utcnow() + timedelta(days=90)).timestamp())))  # Auto-delete after 90 days
+            'ttl': int((datetime.utcnow() + timedelta(days=90)).timestamp())  # Use int instead of Decimal for TTL
         }
         
         chat_table.put_item(Item=item)
@@ -649,9 +648,7 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
             sources.append({
                 "title": source_title or f"Source {len(sources) + 1}",
                 "url": accessible_url,  # Use presigned URL for accessibility
-                "uri": source_url,  # Keep original URI for reference
-                "type": "DOCUMENT" if is_document else "WEB",
-                "score": Decimal(str(result.get('score', 0)))
+                "type": "DOCUMENT" if is_document else "WEB"
             })
             
             logger.info(f"Extracted source: {source_title} - {accessible_url[:100]}...")
@@ -660,7 +657,7 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
     unique_sources = []
     seen_documents = {}
     
-    for source in sorted(sources, key=lambda x: x.get('score', 0), reverse=True):
+    for source in sources:  # Remove sorting by score since we don't store scores anymore
         # Create a unique key for the document (filename-based)
         doc_key = None
         
@@ -731,8 +728,7 @@ def add_blood_center_link_if_needed(user_message: str, sources: List[Dict[str, A
         sources.insert(0, {
             "title": "Blood Center Locator - Find a Donation Location Near You",
             "url": blood_center_url,
-            "type": "WEB",
-            "score": Decimal("1.0")
+            "type": "WEB"
         })
         logger.info("Added blood center locator link for location question")
     
