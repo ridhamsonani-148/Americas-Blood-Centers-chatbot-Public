@@ -35,9 +35,6 @@ CHAT_HISTORY_TABLE = os.environ.get('CHAT_HISTORY_TABLE', 'BloodCentersChatHisto
 try:
     chat_table = dynamodb.Table(CHAT_HISTORY_TABLE)
     logger.info(f"✅ Successfully initialized DynamoDB table: {CHAT_HISTORY_TABLE}")
-    # Test table access
-    table_description = chat_table.table_status
-    logger.info(f"DynamoDB table status: {table_description}")
 except Exception as e:
     logger.error(f"❌ Could not initialize DynamoDB table {CHAT_HISTORY_TABLE}: {e}")
     logger.error(f"Exception type: {type(e).__name__}")
@@ -442,14 +439,6 @@ def save_conversation(session_id: str, question: str, answer: str, language: str
         logger.info(f"Table name: {CHAT_HISTORY_TABLE}")
         logger.info(f"Session ID: {session_id}")
         logger.info(f"Sources count: {len(sources)}")
-        
-        # Test table accessibility first
-        try:
-            table_status = chat_table.table_status
-            logger.info(f"Table status check: {table_status}")
-        except Exception as table_check_error:
-            logger.error(f"Table accessibility check failed: {table_check_error}")
-            raise table_check_error
         
         # Clean sources for DynamoDB storage (remove uri, score fields that cause JSON errors)
         cleaned_sources = []

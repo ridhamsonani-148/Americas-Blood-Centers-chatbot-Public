@@ -175,6 +175,7 @@ export class BedrockChatbotStack extends cdk.Stack {
                 'dynamodb:DeleteItem',
                 'dynamodb:Query',
                 'dynamodb:Scan',
+                'dynamodb:DescribeTable',  // Added missing permission
               ],
               resources: [
                 chatHistoryTable.tableArn,
