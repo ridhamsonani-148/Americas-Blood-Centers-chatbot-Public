@@ -760,12 +760,21 @@ export class BedrockChatbotStack extends cdk.Stack {
               effect: iam.Effect.ALLOW,
               actions: [
                 'bedrock-agent:ListDataSources',
+                'bedrock-agent:GetDataSource',
                 'bedrock-agent:StartIngestionJob',
                 'bedrock-agent:GetIngestionJob',
+                'bedrock-agent:ListIngestionJobs',
+                // Also add bedrock: prefixed permissions (some APIs use this)
+                'bedrock:ListDataSources',
+                'bedrock:GetDataSource',
+                'bedrock:StartIngestionJob',
+                'bedrock:GetIngestionJob',
+                'bedrock:ListIngestionJobs',
               ],
               resources: [
                 `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/${knowledgeBase.attrKnowledgeBaseId}`,
                 `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/${knowledgeBase.attrKnowledgeBaseId}/*`,
+                `arn:aws:bedrock:${this.region}:${this.account}:data-source/*`,
               ],
             }),
           ],
