@@ -11,6 +11,8 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as os from 'os';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as stepfunctions from 'aws-cdk-lib/aws-stepfunctions';
+import * as stepfunctionsTasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as amplify from '@aws-cdk/aws-amplify-alpha';
 import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import { opensearchserverless, opensearch_vectorindex } from '@cdklabs/generative-ai-cdk-constructs';
@@ -782,6 +784,158 @@ export class BedrockChatbotStack extends cdk.Stack {
       description: 'America\'s Blood Centers Bedrock Chat Handler',
     });
 
+    // ===== Sync Operations Lambda Function =====
+    const syncOperationsLambdaRole = new iam.Role(this, 'SyncOperationsLambdaRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      ],
+      inlinePolicies: {
+        BedrockAgentAccess: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'bedrock-agent:ListDataSources',
+                'bedrock-agent:GetDataSource',
+                'bedrock-agent:StartIngestionJob',
+                'bedrock-agent:GetIngestionJob',
+                'bedrock-agent:ListIngestionJobs',
+                // Also add bedrock: prefixed permissions (some APIs use this)
+                'bedrock:ListDataSources',
+                'bedrock:GetDataSource',
+                'bedrock:StartIngestionJob',
+                'bedrock:GetIngestionJob',
+                'bedrock:ListIngestionJobs',
+              ],
+              resources: [
+                `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/${knowledgeBase.attrKnowledgeBaseId}`,
+                `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/${knowledgeBase.attrKnowledgeBaseId}/*`,
+                `arn:aws:bedrock:${this.region}:${this.account}:data-source/*`,
+              ],
+            }),
+          ],
+        }),
+      },
+    });
+
+    const syncOperationsLambda = new lambda.Function(this, 'SyncOperationsLambdaFunction', {
+      runtime: lambda.Runtime.PYTHON_3_11,
+      handler: 'sync_operations.lambda_handler',
+      code: lambda.Code.fromAsset('lambda/sync-operations'),
+      role: syncOperationsLambdaRole,
+      timeout: cdk.Duration.minutes(5), // Short timeout for simple operations
+      memorySize: 256,
+      environment: {
+        KNOWLEDGE_BASE_ID: knowledgeBase.attrKnowledgeBaseId,
+      },
+      description: 'Simple sync operations for Step Functions workflow',
+    });
+
+    // ===== Step Functions State Machine for Sequential Sync =====
+    
+    // Define Lambda tasks for Step Functions
+    const startPdfSync = new stepfunctionsTasks.LambdaInvoke(this, 'StartPdfSync', {
+      lambdaFunction: syncOperationsLambda,
+      payload: stepfunctions.TaskInput.fromObject({
+        operation: 'start_sync',
+        source_type: 'pdf'
+      }),
+      resultPath: '$.pdfResult',
+    });
+
+    const checkPdfStatus = new stepfunctionsTasks.LambdaInvoke(this, 'CheckPdfStatus', {
+      lambdaFunction: syncOperationsLambda,
+      payload: stepfunctions.TaskInput.fromObject({
+        operation: 'check_status',
+        'source_type.$': '$.pdfResult.Payload.source_type',
+        'dataSourceId.$': '$.pdfResult.Payload.dataSourceId',
+        'jobId.$': '$.pdfResult.Payload.jobId'
+      }),
+      resultPath: '$.pdfStatus',
+    });
+
+    const startDailySync = new stepfunctionsTasks.LambdaInvoke(this, 'StartDailySync', {
+      lambdaFunction: syncOperationsLambda,
+      payload: stepfunctions.TaskInput.fromObject({
+        operation: 'start_sync',
+        source_type: 'daily'
+      }),
+      resultPath: '$.dailyResult',
+    });
+
+    const checkDailyStatus = new stepfunctionsTasks.LambdaInvoke(this, 'CheckDailyStatus', {
+      lambdaFunction: syncOperationsLambda,
+      payload: stepfunctions.TaskInput.fromObject({
+        operation: 'check_status',
+        'source_type.$': '$.dailyResult.Payload.source_type',
+        'dataSourceId.$': '$.dailyResult.Payload.dataSourceId',
+        'jobId.$': '$.dailyResult.Payload.jobId'
+      }),
+      resultPath: '$.dailyStatus',
+    });
+
+    const startWebsiteSync = new stepfunctionsTasks.LambdaInvoke(this, 'StartWebsiteSync', {
+      lambdaFunction: syncOperationsLambda,
+      payload: stepfunctions.TaskInput.fromObject({
+        operation: 'start_sync',
+        source_type: 'web'
+      }),
+      resultPath: '$.websiteResult',
+    });
+
+    // Define wait states
+    const waitForPdf = new stepfunctions.Wait(this, 'WaitForPdf', {
+      time: stepfunctions.WaitTime.duration(cdk.Duration.minutes(2)),
+    });
+
+    const waitForDaily = new stepfunctions.Wait(this, 'WaitForDaily', {
+      time: stepfunctions.WaitTime.duration(cdk.Duration.minutes(2)),
+    });
+
+    // Define success and failure states
+    const syncComplete = new stepfunctions.Succeed(this, 'SyncComplete', {
+      comment: 'All sync jobs completed successfully'
+    });
+
+    const syncFailed = new stepfunctions.Fail(this, 'SyncFailed', {
+      comment: 'Sync workflow failed'
+    });
+
+    // Build the workflow
+    const definition = startPdfSync
+      .next(waitForPdf)
+      .next(checkPdfStatus)
+      .next(new stepfunctions.Choice(this, 'IsPdfComplete?')
+        .when(stepfunctions.Condition.booleanEquals('$.pdfStatus.Payload.isComplete', true),
+          new stepfunctions.Choice(this, 'IsPdfSuccess?')
+            .when(stepfunctions.Condition.booleanEquals('$.pdfStatus.Payload.isSuccess', true),
+              startDailySync
+                .next(waitForDaily)
+                .next(checkDailyStatus)
+                .next(new stepfunctions.Choice(this, 'IsDailyComplete?')
+                  .when(stepfunctions.Condition.booleanEquals('$.dailyStatus.Payload.isComplete', true),
+                    new stepfunctions.Choice(this, 'IsDailySuccess?')
+                      .when(stepfunctions.Condition.booleanEquals('$.dailyStatus.Payload.isSuccess', true),
+                        startWebsiteSync.next(syncComplete)
+                      )
+                      .otherwise(syncFailed)
+                  )
+                  .otherwise(waitForDaily) // Continue waiting for daily sync
+                )
+            )
+            .otherwise(syncFailed)
+        )
+        .otherwise(waitForPdf) // Continue waiting for PDF sync
+      );
+
+    // Create the state machine
+    const sequentialSyncStateMachine = new stepfunctions.StateMachine(this, 'SequentialSyncStateMachine', {
+      stateMachineName: `${projectName}-sequential-sync`,
+      definition,
+      timeout: cdk.Duration.hours(6), // Allow up to 6 hours for complete workflow
+    });
+
     // ===== Daily Sync Lambda Function =====
     const dailySyncLambdaRole = new iam.Role(this, 'DailySyncLambdaRole', {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
@@ -1037,6 +1191,16 @@ export class BedrockChatbotStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ChatLambdaFunctionName', {
       value: chatLambda.functionName,
       description: 'Chat Lambda Function Name',
+    });
+
+    new cdk.CfnOutput(this, 'SequentialSyncStateMachineArn', {
+      value: sequentialSyncStateMachine.stateMachineArn,
+      description: 'Step Functions State Machine ARN for Sequential Sync',
+    });
+
+    new cdk.CfnOutput(this, 'SyncOperationsLambdaFunctionName', {
+      value: syncOperationsLambda.functionName,
+      description: 'Sync Operations Lambda Function Name',
     });
 
     new cdk.CfnOutput(this, 'DailySyncLambdaFunctionName', {

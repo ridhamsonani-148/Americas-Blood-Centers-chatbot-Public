@@ -462,7 +462,30 @@ def handle_sync_request(event: Dict[str, Any], headers: Dict[str, str]) -> Dict[
         started_jobs = []
         failed_jobs = []
         
-        for ds in sources_to_sync:
+        # For "both" sync type, we want to sync PDF first, then website
+        if data_source_type == 'both':
+            # Sort data sources to ensure PDF documents sync first
+            pdf_sources = [ds for ds in sources_to_sync if 'Documents' in ds.get('name', '')]
+            web_sources = [ds for ds in sources_to_sync if 'Website' in ds.get('name', '')]
+            
+            # Combine in order: PDF first, then website
+            sources_to_sync = pdf_sources + web_sources
+            logger.info(f"Ordered sync: {len(pdf_sources)} PDF sources first, then {len(web_sources)} website sources")
+            
+            # For manual "both" sync, recommend using sequential sync instead
+            if len(sources_to_sync) > 1:
+                return {
+                    'statusCode': 200,
+                    'headers': headers,
+                    'body': json.dumps({
+                        'success': True,
+                        'message': 'For optimal performance, multiple data sources should be synced sequentially. Please sync PDF Documents first, then Website Content.',
+                        'recommendation': 'Use individual sync options (PDF Documents Only, then Website Content Only) for better results.',
+                        'sources_found': [ds['name'] for ds in sources_to_sync]
+                    })
+                }
+        
+        for i, ds in enumerate(sources_to_sync):
             try:
                 response = bedrock_agent.start_ingestion_job(
                     knowledgeBaseId=KNOWLEDGE_BASE_ID,

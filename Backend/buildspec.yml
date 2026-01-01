@@ -19,6 +19,7 @@ phases:
       - echo "=== Installing Lambda dependencies ==="
       - cd lambda/chat-lambda && pip install -r requirements.txt -t . && cd ../..
       - cd lambda/daily-sync-lambda && pip install -r requirements.txt -t . && cd ../..
+      - cd lambda/sync-operations && pip install -r requirements.txt -t . && cd ../..
       - echo "✅ Lambda dependencies installed"
       - echo "=== Bootstrapping CDK Environment ==="
       - |
@@ -92,77 +93,38 @@ phases:
           echo "  🔍 OpenSearch Endpoint: $OPENSEARCH_ENDPOINT"
           
           echo ""
-          echo "=== Starting Knowledge Base Ingestion ==="
+          echo "=== Starting Knowledge Base Ingestion (Background) ==="
           
-          # Start ingestion for all data sources sequentially (not parallel)
-          echo "Starting ingestion jobs for all data sources sequentially..."
+          # Start sequential sync using Step Functions state machine
+          echo "Starting Step Functions workflow for sequential sync..."
           
-          # Get all data sources
-          DATA_SOURCES=$(aws bedrock-agent list-data-sources \
-            --knowledge-base-id "$KB_ID" \
-            --region "$CDK_DEFAULT_REGION" \
-            --query 'dataSourceSummaries[].{name:name,id:dataSourceId}' \
-            --output json)
+          # Get Step Functions State Machine ARN from CDK outputs
+          STATE_MACHINE_ARN=$(cat outputs.json | jq -r '.AmericasBloodCentersBedrockStack.SequentialSyncStateMachineArn // empty')
           
-          echo "Found data sources:"
-          echo "$DATA_SOURCES" | jq -r '.[] | "  📄 \(.name) (ID: \(.id))"'
-          
-          # Start ingestion jobs sequentially with proper waits
-          INGESTION_JOBS=""
-          TOTAL_SOURCES=$(echo "$DATA_SOURCES" | jq length)
-          CURRENT=0
-          
-          for row in $(echo "$DATA_SOURCES" | jq -r '.[] | @base64'); do
-            _jq() {
-              echo ${row} | base64 --decode | jq -r ${1}
-            }
+          if [ -n "$STATE_MACHINE_ARN" ] && [ "$STATE_MACHINE_ARN" != "empty" ]; then
+            echo "✅ Found Step Functions State Machine: $STATE_MACHINE_ARN"
             
-            DS_NAME=$(_jq '.name')
-            DS_ID=$(_jq '.id')
-            CURRENT=$((CURRENT + 1))
-            
-            echo ""
-            echo "🚀 Starting ingestion job $CURRENT/$TOTAL_SOURCES: $DS_NAME"
-            
-            JOB_ID=$(aws bedrock-agent start-ingestion-job \
-              --knowledge-base-id "$KB_ID" \
-              --data-source-id "$DS_ID" \
-              --description "Sequential deployment ingestion of $DS_NAME" \
+            # Start Step Functions execution asynchronously
+            EXECUTION_ARN=$(aws stepfunctions start-execution \
+              --state-machine-arn "$STATE_MACHINE_ARN" \
+              --name "deployment-sync-$(date +%s)" \
+              --input '{"sync_type":"deployment","timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' \
               --region "$CDK_DEFAULT_REGION" \
-              --query 'ingestionJob.ingestionJobId' \
-              --output text 2>/dev/null)
+              --query 'executionArn' \
+              --output text)
             
-            if [ -n "$JOB_ID" ] && [ "$JOB_ID" != "None" ]; then
-              echo "✅ Started ingestion job: $JOB_ID"
-              INGESTION_JOBS="$INGESTION_JOBS$DS_NAME: $JOB_ID\n"
-              
-              # Wait for job to start properly before starting next one
-              echo "⏳ Waiting 30 seconds before starting next job..."
-              sleep 30
-              
-              # Check job status
-              JOB_STATUS=$(aws bedrock-agent get-ingestion-job \
-                --knowledge-base-id "$KB_ID" \
-                --data-source-id "$DS_ID" \
-                --ingestion-job-id "$JOB_ID" \
-                --region "$CDK_DEFAULT_REGION" \
-                --query 'ingestionJob.status' \
-                --output text 2>/dev/null || echo "UNKNOWN")
-              
-              echo "📊 Job status: $JOB_STATUS"
-              
+            if [ $? -eq 0 ]; then
+              echo "✅ Step Functions workflow started successfully"
+              echo "📊 Execution ARN: $EXECUTION_ARN"
+              echo "🔄 Sync order: PDF Documents → Daily Sync → Website Content"
+              echo "⏱️ Workflow will handle all waiting and sequencing automatically"
+              echo "💰 Cost optimized: Only pay for actual state transitions"
+              echo "🎯 No Lambda timeout issues - can run for hours"
             else
-              echo "⚠️ Failed to start ingestion job for $DS_NAME"
+              echo "⚠️ Failed to start Step Functions workflow, but continuing deployment"
             fi
-          done
-          
-          if [ -n "$INGESTION_JOBS" ]; then
-            echo ""
-            echo "📊 Started ingestion jobs:"
-            echo -e "$INGESTION_JOBS"
-            echo ""
-            echo "⏳ Note: Ingestion jobs will continue running in background"
-            echo "📊 Monitor progress in AWS Bedrock console"
+          else
+            echo "⚠️ Step Functions State Machine not found, skipping background sync"
           fi
           
           echo ""
