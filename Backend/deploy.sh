@@ -17,8 +17,8 @@ if [ -z "${PROJECT_NAME:-}" ]; then
 fi
 
 if [ -z "${MODEL_ID:-}" ]; then
-  read -rp "Enter Bedrock model ID [default: anthropic.claude-3-haiku-20240307-v1:0]: " MODEL_ID
-  MODEL_ID=${MODEL_ID:-anthropic.claude-3-haiku-20240307-v1:0}
+  read -rp "Enter Bedrock model ID [default: global.anthropic.claude-sonnet-4-5-20250929-v1:0]: " MODEL_ID
+  MODEL_ID=${MODEL_ID:-global.anthropic.claude-sonnet-4-5-20250929-v1:0}
 fi
 
 if [ -z "${EMBEDDING_MODEL_ID:-}" ]; then

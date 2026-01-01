@@ -39,7 +39,7 @@ export class BedrockChatbotStack extends cdk.Stack {
     console.log(`Lambda architecture: ${lambdaArchitecture}`);
 
     const projectName = props.projectName || 'abc';
-    const modelId = props.modelId || 'anthropic.claude-3-haiku-20240307-v1:0';
+    const modelId = props.modelId || 'global.anthropic.claude-sonnet-4-5-20250929-v1:0';
     const embeddingModelId = props.embeddingModelId || 'amazon.titan-embed-text-v1';
 
     // ===== S3 Bucket for Documents =====
@@ -684,7 +684,7 @@ export class BedrockChatbotStack extends cdk.Stack {
         parsingConfiguration: {
           parsingStrategy: "BEDROCK_FOUNDATION_MODEL",
           bedrockFoundationModelConfiguration: {
-            modelArn: `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-3-haiku-20240307-v1:0`,
+            modelArn: `arn:aws:bedrock:${this.region}::foundation-model/${modelId}`,
             parsingPrompt: {
               parsingPromptText: "Extract and structure the content from this document, focusing on blood donation information, statistics, and guidelines."
             }

@@ -28,7 +28,7 @@ phases:
         fi
         cdk bootstrap --require-approval never \
           --context projectName="$PROJECT_NAME" \
-          --context modelId="${MODEL_ID:-anthropic.claude-3-haiku-20240307-v1:0}" \
+          --context modelId="${MODEL_ID:-global.anthropic.claude-sonnet-4-5-20250929-v1:0}" \
           --context embeddingModelId="${EMBEDDING_MODEL_ID:-amazon.titan-embed-text-v1}"
       - echo "✅ CDK Bootstrap completed"
 

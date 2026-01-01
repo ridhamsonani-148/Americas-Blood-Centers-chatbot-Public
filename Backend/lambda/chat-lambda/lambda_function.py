@@ -12,6 +12,7 @@ import boto3
 from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
 import uuid
+from decimal import Decimal
 
 # Configure logging
 logger = logging.getLogger()
@@ -25,7 +26,7 @@ dynamodb = boto3.resource('dynamodb')
 
 # Environment variables
 KNOWLEDGE_BASE_ID = os.environ.get('KNOWLEDGE_BASE_ID')
-MODEL_ID = os.environ.get('MODEL_ID', 'anthropic.claude-3-haiku-20240307-v1:0')
+MODEL_ID = os.environ.get('MODEL_ID', 'global.anthropic.claude-sonnet-4-5-20250929-v1:0')
 MAX_TOKENS = int(os.environ.get('MAX_TOKENS', '1000'))
 TEMPERATURE = float(os.environ.get('TEMPERATURE', '0.0'))  # Minimum temperature for maximum consistency
 CHAT_HISTORY_TABLE = os.environ.get('CHAT_HISTORY_TABLE', 'BloodCentersChatHistory')
@@ -36,14 +37,35 @@ try:
 except Exception as e:
     logger.warning(f"Could not initialize DynamoDB table {CHAT_HISTORY_TABLE}: {e}")
     chat_table = None
-CHAT_HISTORY_TABLE = os.environ.get('CHAT_HISTORY_TABLE', 'BloodCentersChatHistory')
 
-# Initialize DynamoDB table
-try:
-    chat_table = dynamodb.Table(CHAT_HISTORY_TABLE)
-except Exception as e:
-    logger.warning(f"Could not initialize DynamoDB table {CHAT_HISTORY_TABLE}: {e}")
-    chat_table = None
+def convert_dynamodb_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convert DynamoDB item with Decimal objects to JSON-serializable format
+    """
+    def convert_value(value):
+        if isinstance(value, Decimal):
+            # Convert Decimal to int if it's a whole number, otherwise float
+            return int(value) if value % 1 == 0 else float(value)
+        elif isinstance(value, dict):
+            return {k: convert_value(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [convert_value(v) for v in value]
+        else:
+            return value
+    
+    return {
+        'id': item.get('conversation_id'),
+        'sessionId': item.get('session_id'),
+        'message': item.get('question', ''),
+        'question': item.get('question', ''),
+        'response': item.get('answer', ''),
+        'answer': item.get('answer', ''),
+        'timestamp': item.get('timestamp'),
+        'created_at': item.get('timestamp'),
+        'date': item.get('date'),
+        'language': item.get('language', 'en'),
+        'sources': convert_value(item.get('sources', []))
+    }
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -136,7 +158,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             retrievalQuery={'text': user_message},
             retrievalConfiguration={
                 'vectorSearchConfiguration': {
-                    'numberOfResults': 20,  
+                    'numberOfResults': 20,  # Gets top 20 chunks  
                     'overrideSearchType': 'SEMANTIC'  # Use semantic search only
                 }
             }
@@ -335,26 +357,8 @@ def get_conversations(query_params: Dict[str, Any], headers: Dict[str, str]) -> 
         # Format conversations for frontend
         conversations = []
         for item in paginated_items:
-            # Convert Decimal objects to regular Python types for JSON serialization
-            conversation = {
-                'id': item.get('conversation_id'),
-                'sessionId': item.get('session_id'),
-                'message': item.get('question', ''),
-                'question': item.get('question', ''),
-                'response': item.get('answer', ''),
-                'answer': item.get('answer', ''),
-                'timestamp': item.get('timestamp'),
-                'created_at': item.get('timestamp'),
-                'date': item.get('date'),
-                'language': item.get('language', 'en'),
-                'sources': item.get('sources', [])
-            }
-            
-            # Convert any Decimal objects to int/float for JSON serialization
-            for key, value in conversation.items():
-                if hasattr(value, '__class__') and 'Decimal' in str(value.__class__):
-                    conversation[key] = int(value) if value % 1 == 0 else float(value)
-            
+            # Convert DynamoDB item to regular Python types
+            conversation = convert_dynamodb_item(item)
             conversations.append(conversation)
         
         return {
