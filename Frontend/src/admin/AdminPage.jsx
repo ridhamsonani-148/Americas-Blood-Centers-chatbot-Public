@@ -35,6 +35,7 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import CloseIcon from "@mui/icons-material/Close";
+import MarkdownContent from '../Components/MarkdownContent';
 import { PRIMARY_MAIN, DARK_BLUE } from '../utilities/constants';
 
 const AdminPage = ({ onLogout }) => {
@@ -186,33 +187,6 @@ const AdminPage = ({ onLogout }) => {
   const handleCloseModal = () => {
     setModalOpen(false);
     setSelectedConversation(null);
-  };
-
-  // Function to render markdown-like text with basic formatting
-  const renderFormattedText = (text) => {
-    if (!text) return '';
-    
-    // Split by double newlines to create paragraphs
-    const paragraphs = text.split('\n\n');
-    
-    return paragraphs.map((paragraph, index) => (
-      <Typography 
-        key={index} 
-        variant="body2" 
-        sx={{ 
-          mb: 1, 
-          whiteSpace: 'pre-wrap',
-          '& strong': { fontWeight: 'bold' }
-        }}
-        dangerouslySetInnerHTML={{
-          __html: paragraph
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold text
-            .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic text
-            .replace(/^- (.*$)/gim, '• $1') // Bullet points
-            .replace(/^\d+\. (.*$)/gim, '$&') // Numbered lists
-        }}
-      />
-    ));
   };
 
   return (
@@ -522,9 +496,9 @@ const AdminPage = ({ onLogout }) => {
                 <Typography variant="subtitle2" color="primary" gutterBottom>
                   Answer:
                 </Typography>
-                <Box sx={{ '& > *': { mb: 1 } }}>
-                  {renderFormattedText(selectedConversation.response || selectedConversation.answer)}
-                </Box>
+                <MarkdownContent 
+                  content={selectedConversation.response || selectedConversation.answer}
+                />
               </Paper>
 
               {/* Metadata */}
