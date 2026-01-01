@@ -23,11 +23,18 @@ import {
   Toolbar,
   Container,
   Card,
-  CardContent
+  CardContent,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton
 } from "@mui/material";
 import HistoryIcon from "@mui/icons-material/History";
 import SettingsIcon from "@mui/icons-material/Settings";
 import DashboardIcon from "@mui/icons-material/Dashboard";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import CloseIcon from "@mui/icons-material/Close";
 import { PRIMARY_MAIN, DARK_BLUE } from '../utilities/constants';
 
 const AdminPage = ({ onLogout }) => {
@@ -42,6 +49,10 @@ const AdminPage = ({ onLogout }) => {
   const [pageSize] = useState(10);
   const [dateFilter, setDateFilter] = useState('');
   const [languageFilter, setLanguageFilter] = useState('');
+  
+  // Modal state for viewing full conversation
+  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   // Get API URL from environment
   const API_URL = process.env.REACT_APP_API_BASE_URL || process.env.REACT_APP_CHAT_ENDPOINT;
@@ -165,6 +176,43 @@ const AdminPage = ({ onLogout }) => {
   const truncateText = (text, maxLength = 100) => {
     if (!text || text.length <= maxLength) return text;
     return text.substring(0, maxLength) + '...';
+  };
+
+  const handleViewConversation = (conversation) => {
+    setSelectedConversation(conversation);
+    setModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setModalOpen(false);
+    setSelectedConversation(null);
+  };
+
+  // Function to render markdown-like text with basic formatting
+  const renderFormattedText = (text) => {
+    if (!text) return '';
+    
+    // Split by double newlines to create paragraphs
+    const paragraphs = text.split('\n\n');
+    
+    return paragraphs.map((paragraph, index) => (
+      <Typography 
+        key={index} 
+        variant="body2" 
+        sx={{ 
+          mb: 1, 
+          whiteSpace: 'pre-wrap',
+          '& strong': { fontWeight: 'bold' }
+        }}
+        dangerouslySetInnerHTML={{
+          __html: paragraph
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold text
+            .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic text
+            .replace(/^- (.*$)/gim, '• $1') // Bullet points
+            .replace(/^\d+\. (.*$)/gim, '$&') // Numbered lists
+        }}
+      />
+    ));
   };
 
   return (
@@ -359,6 +407,7 @@ const AdminPage = ({ onLogout }) => {
                     <TableCell><strong>Answer</strong></TableCell>
                     <TableCell><strong>Date</strong></TableCell>
                     <TableCell><strong>Language</strong></TableCell>
+                    <TableCell><strong>Actions</strong></TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -371,7 +420,7 @@ const AdminPage = ({ onLogout }) => {
                       </TableCell>
                       <TableCell sx={{ maxWidth: 400 }}>
                         <Typography variant="body2" color="textSecondary" title={conversation.response || conversation.answer}>
-                          {truncateText(conversation.response || conversation.answer, 100)}
+                          {truncateText(conversation.response || conversation.answer, 150)}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -385,6 +434,15 @@ const AdminPage = ({ onLogout }) => {
                           size="small"
                           color={conversation.language === 'es' ? 'secondary' : 'primary'}
                         />
+                      </TableCell>
+                      <TableCell>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleViewConversation(conversation)}
+                          title="View full conversation"
+                        >
+                          <VisibilityIcon />
+                        </IconButton>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -427,6 +485,73 @@ const AdminPage = ({ onLogout }) => {
           </Paper>
         )}
       </Container>
+
+      {/* Full Conversation Modal */}
+      <Dialog 
+        open={modalOpen} 
+        onClose={handleCloseModal}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { maxHeight: '80vh' }
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6">
+            Full Conversation
+          </Typography>
+          <IconButton onClick={handleCloseModal} size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          {selectedConversation && (
+            <Box>
+              {/* Question */}
+              <Paper sx={{ p: 2, mb: 2, backgroundColor: '#f8f9fa' }}>
+                <Typography variant="subtitle2" color="primary" gutterBottom>
+                  Question:
+                </Typography>
+                <Typography variant="body1">
+                  {selectedConversation.message || selectedConversation.question}
+                </Typography>
+              </Paper>
+
+              {/* Answer */}
+              <Paper sx={{ p: 2, mb: 2 }}>
+                <Typography variant="subtitle2" color="primary" gutterBottom>
+                  Answer:
+                </Typography>
+                <Box sx={{ '& > *': { mb: 1 } }}>
+                  {renderFormattedText(selectedConversation.response || selectedConversation.answer)}
+                </Box>
+              </Paper>
+
+              {/* Metadata */}
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Chip 
+                  label={`Language: ${selectedConversation.language === 'es' ? 'Español' : 'English'}`}
+                  size="small"
+                  color={selectedConversation.language === 'es' ? 'secondary' : 'primary'}
+                />
+                <Typography variant="body2" color="textSecondary">
+                  {formatDate(selectedConversation.timestamp || selectedConversation.created_at)}
+                </Typography>
+                {selectedConversation.sessionId && (
+                  <Typography variant="body2" color="textSecondary">
+                    Session: {selectedConversation.sessionId.substring(0, 8)}...
+                  </Typography>
+                )}
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseModal} color="primary">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

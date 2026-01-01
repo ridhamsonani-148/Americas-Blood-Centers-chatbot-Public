@@ -201,6 +201,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         # Step 3: Process response for markdown formatting
         processed_response = process_markdown_response(response_data['response'])
+        
+        # Log both raw and processed responses for comparison
+        logger.info(f"RAW CLAUDE RESPONSE: {response_data['response'][:500]}...")
+        logger.info(f"PROCESSED RESPONSE: {processed_response[:500]}...")
+        logger.info(f"Response has markdown: {has_markdown_formatting(processed_response)}")
 
         # Step 4: Add blood center link if asking about donation locations
         sources = add_blood_center_link_if_needed(user_message, sources)
@@ -463,6 +468,7 @@ def save_conversation(session_id: str, question: str, answer: str, language: str
         }
         
         logger.info(f"DynamoDB item prepared: {json.dumps(item, default=str)[:500]}...")
+        logger.info(f"Answer being saved: {answer[:200]}...")  # Log first 200 chars of answer
         
         # Attempt to save to DynamoDB with retry logic
         max_retries = 3
@@ -614,13 +620,17 @@ Contexto:
 
 Pregunta del usuario: {user_message}
 
-Instrucciones:
+Instrucciones IMPORTANTES:
 - Responde SOLO en español
 - Usa la información del contexto proporcionado
 - Si la pregunta es sobre ubicaciones de donación, menciona el localizador de centros de sangre
 - Sé preciso y útil
 - Si no tienes información suficiente en el contexto, dilo claramente
-- Usa formato markdown cuando sea apropiado (listas, texto en negrita, etc.)
+- OBLIGATORIO: Usa formato markdown en tu respuesta:
+  * Usa **texto en negrita** para puntos importantes
+  * Usa listas con - para enumerar elementos
+  * Usa números 1. 2. 3. para listas ordenadas
+  * Usa ## para subtítulos si es necesario
 - Organiza la información de manera clara y fácil de leer
 
 Respuesta:"""
@@ -632,13 +642,17 @@ Context:
 
 User question: {user_message}
 
-Instructions:
+IMPORTANT Instructions:
 - Answer based on the provided context
 - If asked about donation locations, mention the blood center locator
 - Be accurate and helpful
 - If you don't have sufficient information in the context, say so clearly
 - Focus on blood donation, eligibility, and America's Blood Centers information
-- Use markdown formatting when appropriate (lists, bold text, etc.)
+- REQUIRED: Use markdown formatting in your response:
+  * Use **bold text** for important points
+  * Use - for bullet lists
+  * Use 1. 2. 3. for numbered lists
+  * Use ## for subheadings if needed
 - Organize information clearly and make it easy to read
 
 Answer:"""
@@ -815,6 +829,37 @@ def process_markdown_response(response: str) -> str:
     # Clean up any existing markdown formatting issues
     processed = response.strip()
 
+    # If Claude didn't provide markdown, try to add some basic formatting
+    if not has_markdown_formatting(processed):
+        logger.info("Response lacks markdown formatting, attempting to add basic formatting")
+        
+        # Convert patterns that look like lists to markdown lists
+        # Handle numbered lists (1. 2. 3. etc.)
+        processed = re.sub(r'^(\d+)\.\s+(.+)$', r'\1. \2', processed, flags=re.MULTILINE)
+        
+        # Handle bullet-like patterns (- or * at start of line)
+        processed = re.sub(r'^[-*]\s+(.+)$', r'- \1', processed, flags=re.MULTILINE)
+        
+        # Make key phrases bold (common blood donation terms)
+        key_terms = [
+            r'\b(eligibility requirements?)\b',
+            r'\b(blood pressure)\b',
+            r'\b(hemoglobin)\b',
+            r'\b(iron levels?)\b',
+            r'\b(donation process)\b',
+            r'\b(health status)\b',
+            r'\b(medical history)\b',
+            r'\b(age requirements?)\b',
+            r'\b(weight requirements?)\b',
+            r'\b(travel restrictions?)\b',
+            r'\b(medications?)\b',
+            r'\b(deferral period)\b',
+            r'\b(screening process)\b'
+        ]
+        
+        for term_pattern in key_terms:
+            processed = re.sub(term_pattern, r'**\1**', processed, flags=re.IGNORECASE)
+
     # Ensure proper line breaks for lists
     processed = re.sub(r'\n(\d+\.)', r'\n\n\1', processed)  # Numbered lists
     processed = re.sub(r'\n(\*|\-)', r'\n\n\1', processed)  # Bullet lists
@@ -849,3 +894,5 @@ def has_markdown_formatting(text: str) -> bool:
     for pattern in markdown_patterns:
         if re.search(pattern, text, re.MULTILINE):
             return True
+    
+    return False
