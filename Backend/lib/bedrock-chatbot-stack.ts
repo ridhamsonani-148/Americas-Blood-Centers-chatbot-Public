@@ -680,14 +680,11 @@ export class BedrockChatbotStack extends cdk.Stack {
             breakpointPercentileThreshold: 95,
           },
         },
-        // Use default parsing configuration for cost optimization
+        // Use Bedrock Data Automation (BDA) for advanced document parsing
         parsingConfiguration: {
-          parsingStrategy: "BEDROCK_FOUNDATION_MODEL",
-          bedrockFoundationModelConfiguration: {
-            modelArn: `arn:aws:bedrock:${this.region}::foundation-model/${modelId}`,
-            parsingPrompt: {
-              parsingPromptText: "Extract and structure the content from this document, focusing on blood donation information, statistics, and guidelines."
-            }
+          parsingStrategy: "BEDROCK_DATA_AUTOMATION",
+          bedrockDataAutomationConfiguration: {
+            parsingModality: "MULTIMODAL",
           },
         },
       },
