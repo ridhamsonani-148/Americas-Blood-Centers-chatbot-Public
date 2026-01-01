@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AdminLogin from './AdminLogin';
 import AdminPage from './AdminPage';
-import AuthGuard from '../components/AuthGuard';
 import authService from '../services/authService';
 
 const AdminWrapper = () => {
@@ -41,9 +40,9 @@ const AdminWrapper = () => {
       <Route 
         path="/dashboard" 
         element={
-          <AuthGuard>
-            <AdminPage onLogout={handleLogout} />
-          </AuthGuard>
+          isAuthenticated ? 
+            <AdminPage onLogout={handleLogout} /> :
+            <Navigate to="/admin" replace />
         } 
       />
     </Routes>

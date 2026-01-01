@@ -313,16 +313,26 @@ const AdminLogin = () => {
               <Divider sx={{ my: 2 }} />
               <Box sx={{ textAlign: 'center' }}>
                 {isSignUp ? (
-                  <Typography variant="body2">
+                  <Typography variant="body2" sx={{ display: 'inline' }}>
                     Already have an account?{' '}
-                    <Link component="button" type="button" onClick={switchMode}>
+                    <Link 
+                      component="button" 
+                      type="button" 
+                      onClick={switchMode}
+                      sx={{ display: 'inline', verticalAlign: 'baseline' }}
+                    >
                       Login here
                     </Link>
                   </Typography>
                 ) : (
-                  <Typography variant="body2">
+                  <Typography variant="body2" sx={{ display: 'inline' }}>
                     New admin user?{' '}
-                    <Link component="button" type="button" onClick={switchMode}>
+                    <Link 
+                      component="button" 
+                      type="button" 
+                      onClick={switchMode}
+                      sx={{ display: 'inline', verticalAlign: 'baseline' }}
+                    >
                       Sign up here
                     </Link>
                   </Typography>
