@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import AdminLogin from './AdminLogin';
 import AdminPage from './AdminPage';
 import authService from '../services/authService';
@@ -7,13 +7,18 @@ import authService from '../services/authService';
 const AdminWrapper = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const location = useLocation();
 
   useEffect(() => {
-    // Check if user is already authenticated using Cognito tokens
-    const authenticated = authService.isAuthenticated();
-    setIsAuthenticated(authenticated);
-    setIsLoading(false);
-  }, []);
+    // Check authentication status whenever the location changes
+    const checkAuth = () => {
+      const authenticated = authService.isAuthenticated();
+      setIsAuthenticated(authenticated);
+      setIsLoading(false);
+    };
+
+    checkAuth();
+  }, [location]); // Re-check when location changes
 
   const handleLogout = () => {
     authService.signOut();

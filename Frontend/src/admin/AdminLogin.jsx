@@ -275,7 +275,23 @@ const AdminLogin = () => {
                   onChange={handleInputChange}
                   margin="normal"
                   required
+                  helperText={isSignUp ? "Must be at least 8 characters with uppercase, lowercase, and numbers" : ""}
                 />
+
+                {/* Password Requirements (Signup only) */}
+                {isSignUp && (
+                  <Box sx={{ mt: 1, mb: 1, p: 2, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 'bold' }}>
+                      Password Requirements:
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+                      • At least 8 characters long<br/>
+                      • Contains uppercase letter (A-Z)<br/>
+                      • Contains lowercase letter (a-z)<br/>
+                      • Contains at least one number (0-9)
+                    </Typography>
+                  </Box>
+                )}
 
                 {/* Confirm Password Field (Signup only) */}
                 {isSignUp && (
