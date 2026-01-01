@@ -156,6 +156,12 @@ export class BedrockChatbotStack extends cdk.Stack {
                 'bedrock-agent:StartIngestionJob',
                 'bedrock-agent:GetIngestionJob',
                 'bedrock-agent:ListIngestionJobs',
+                // Also add bedrock: prefixed permissions (some APIs use this)
+                'bedrock:ListDataSources',
+                'bedrock:GetDataSource',
+                'bedrock:StartIngestionJob',
+                'bedrock:GetIngestionJob',
+                'bedrock:ListIngestionJobs',
               ],
               resources: [
                 `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`,
