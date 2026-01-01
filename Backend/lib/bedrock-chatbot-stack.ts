@@ -147,6 +147,21 @@ export class BedrockChatbotStack extends cdk.Stack {
                 `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`,
               ],
             }),
+            // Bedrock Agent permissions for data source management
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'bedrock-agent:ListDataSources',
+                'bedrock-agent:GetDataSource',
+                'bedrock-agent:StartIngestionJob',
+                'bedrock-agent:GetIngestionJob',
+                'bedrock-agent:ListIngestionJobs',
+              ],
+              resources: [
+                `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`,
+                `arn:aws:bedrock:${this.region}:${this.account}:data-source/*`,
+              ],
+            }),
             // S3 permissions for documents
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,

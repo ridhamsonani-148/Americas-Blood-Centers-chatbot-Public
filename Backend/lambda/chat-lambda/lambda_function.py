@@ -398,17 +398,132 @@ def get_conversations(query_params: Dict[str, Any], headers: Dict[str, str]) -> 
 
 def handle_sync_request(event: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
     """
-    Handle data sync requests (existing functionality)
+    Handle data sync requests - triggers ingestion jobs for knowledge base data sources
     """
-    # This is your existing sync functionality
-    return {
-        'statusCode': 200,
-        'headers': headers,
-        'body': json.dumps({
-            'success': True,
-            'message': 'Sync request received'
-        })
-    }
+    try:
+        # Parse request body
+        if 'body' in event:
+            if isinstance(event['body'], str):
+                body = json.loads(event['body'])
+            else:
+                body = event['body']
+        else:
+            body = {}
+        
+        sync_type = body.get('sync_type', 'manual')  # 'manual' or 'daily'
+        data_source_type = body.get('data_source_type', 'both')  # 'both', 'pdf', 'web', or 'daily'
+        
+        logger.info(f"Sync request: type={sync_type}, data_source_type={data_source_type}")
+        
+        # Initialize Bedrock Agent client
+        bedrock_agent = boto3.client('bedrock-agent')
+        
+        # Get all data sources
+        data_sources_response = bedrock_agent.list_data_sources(
+            knowledgeBaseId=KNOWLEDGE_BASE_ID
+        )
+        
+        data_sources = data_sources_response.get('dataSourceSummaries', [])
+        logger.info(f"Found {len(data_sources)} data sources")
+        
+        # Determine which data sources to sync
+        sources_to_sync = []
+        
+        if sync_type == 'daily' or data_source_type == 'daily':
+            # Only sync the daily sync data source
+            for ds in data_sources:
+                if 'DailySync' in ds.get('name', ''):
+                    sources_to_sync.append(ds)
+                    break
+        else:
+            # Manual sync - sync based on data_source_type
+            for ds in data_sources:
+                ds_name = ds.get('name', '')
+                if data_source_type == 'both':
+                    # Sync all except daily sync (that runs automatically)
+                    if 'DailySync' not in ds_name:
+                        sources_to_sync.append(ds)
+                elif data_source_type == 'pdf' and 'Documents' in ds_name:
+                    sources_to_sync.append(ds)
+                elif data_source_type == 'web' and 'Website' in ds_name:
+                    sources_to_sync.append(ds)
+        
+        if not sources_to_sync:
+            return {
+                'statusCode': 404,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'error': f'No data sources found for sync type: {data_source_type}'
+                })
+            }
+        
+        # Start ingestion jobs
+        started_jobs = []
+        failed_jobs = []
+        
+        for ds in sources_to_sync:
+            try:
+                response = bedrock_agent.start_ingestion_job(
+                    knowledgeBaseId=KNOWLEDGE_BASE_ID,
+                    dataSourceId=ds['dataSourceId'],
+                    description=f"{sync_type.title()} sync - {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+                )
+                
+                job_id = response['ingestionJob']['ingestionJobId']
+                started_jobs.append({
+                    'dataSourceName': ds['name'],
+                    'dataSourceId': ds['dataSourceId'],
+                    'ingestionJobId': job_id
+                })
+                logger.info(f"Started ingestion job for {ds['name']}: {job_id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to start ingestion job for {ds['name']}: {str(e)}")
+                failed_jobs.append({
+                    'dataSourceName': ds['name'],
+                    'error': str(e)
+                })
+        
+        # Prepare response
+        if started_jobs:
+            message = f"Successfully started {len(started_jobs)} ingestion job(s)"
+            if failed_jobs:
+                message += f", {len(failed_jobs)} failed"
+            
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': True,
+                    'message': message,
+                    'started_jobs': started_jobs,
+                    'failed_jobs': failed_jobs,
+                    'sync_type': sync_type,
+                    'timestamp': datetime.utcnow().isoformat()
+                })
+            }
+        else:
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'error': 'Failed to start any ingestion jobs',
+                    'failed_jobs': failed_jobs
+                })
+            }
+            
+    except Exception as e:
+        logger.error(f"Error handling sync request: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({
+                'success': False,
+                'error': str(e)
+            })
+        }
 
 def get_system_status(headers: Dict[str, str]) -> Dict[str, Any]:
     """

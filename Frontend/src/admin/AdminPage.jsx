@@ -54,6 +54,10 @@ const AdminPage = ({ onLogout }) => {
   // Modal state for viewing full conversation
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
+  
+  // Sync selection state
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+  const [selectedDataSource, setSelectedDataSource] = useState('both');
 
   // Get API URL from environment
   const API_URL = process.env.REACT_APP_API_BASE_URL || process.env.REACT_APP_CHAT_ENDPOINT;
@@ -100,34 +104,64 @@ const AdminPage = ({ onLogout }) => {
     }
   }, [activeTab, currentPage, dateFilter, languageFilter, fetchChatHistory]);
 
-  const triggerDataSync = async (syncType) => {
+  const triggerDataSync = async (syncType, dataSourceType = null) => {
     setIsLoading(true);
     setStatus('');
 
     try {
+      const requestBody = {
+        sync_type: syncType,
+        data_source_type: dataSourceType || (syncType === 'daily' ? 'daily' : selectedDataSource)
+      };
+
       const response = await fetch(`${API_URL}/admin/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          sync_type: syncType,
-          data_source_type: 'both'
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      await response.json();
-      setStatus(`${syncType} sync started successfully`);
+      const data = await response.json();
+      
+      if (data.success) {
+        let message = data.message;
+        if (data.started_jobs && data.started_jobs.length > 0) {
+          const jobNames = data.started_jobs.map(job => job.dataSourceName).join(', ');
+          message += `\n\nData sources syncing: ${jobNames}`;
+          
+          if (data.failed_jobs && data.failed_jobs.length > 0) {
+            const failedNames = data.failed_jobs.map(job => job.dataSourceName).join(', ');
+            message += `\n\nFailed: ${failedNames}`;
+          }
+        }
+        setStatus(message);
+      } else {
+        setStatus(`Error: ${data.error || 'Unknown error'}`);
+      }
     } catch (error) {
       console.error('Error triggering sync:', error);
-      setStatus('Error starting sync');
+      setStatus(`Error starting ${syncType} sync: ${error.message}`);
     } finally {
       setIsLoading(false);
+      setSyncDialogOpen(false);
     }
+  };
+
+  const handleManualSyncClick = () => {
+    setSyncDialogOpen(true);
+  };
+
+  const handleSyncDialogClose = () => {
+    setSyncDialogOpen(false);
+  };
+
+  const handleConfirmSync = () => {
+    triggerDataSync('manual');
   };
 
   const checkKnowledgeBaseStatus = async () => {
@@ -270,16 +304,16 @@ const AdminPage = ({ onLogout }) => {
                       Data Synchronization
                     </Typography>
                     <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                      Sync knowledge base with latest data sources
+                      Sync knowledge base with latest data sources. This updates the chatbot's knowledge with new information.
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 2, flexDirection: 'column' }}>
                       <Button
                         variant="contained"
-                        onClick={() => triggerDataSync('manual')}
+                        onClick={handleManualSyncClick}
                         disabled={isLoading}
                         sx={{ backgroundColor: PRIMARY_MAIN }}
                       >
-                        Manual Sync
+                        Manual Sync (Choose Sources)
                       </Button>
                       <Button
                         variant="contained"
@@ -287,7 +321,7 @@ const AdminPage = ({ onLogout }) => {
                         disabled={isLoading}
                         sx={{ backgroundColor: PRIMARY_MAIN }}
                       >
-                        Daily Sync
+                        Daily Sync (Blood Supply Updates)
                       </Button>
                     </Box>
                   </CardContent>
@@ -324,7 +358,13 @@ const AdminPage = ({ onLogout }) => {
             </Grid>
 
             {status && (
-              <Alert severity="info" sx={{ mt: 3 }}>
+              <Alert 
+                severity={status.includes('Error') ? 'error' : 'info'} 
+                sx={{ 
+                  mt: 3,
+                  whiteSpace: 'pre-line' // Allow line breaks in status messages
+                }}
+              >
                 {status}
               </Alert>
             )}
@@ -523,6 +563,102 @@ const AdminPage = ({ onLogout }) => {
         <DialogActions>
           <Button onClick={handleCloseModal} color="primary">
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Data Source Selection Dialog */}
+      <Dialog 
+        open={syncDialogOpen} 
+        onClose={handleSyncDialogClose}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Select Data Sources to Sync
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+            Choose which data sources you want to synchronize with the latest content:
+          </Typography>
+          
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box
+              onClick={() => setSelectedDataSource('both')}
+              sx={{
+                p: 2,
+                border: selectedDataSource === 'both' ? `2px solid ${PRIMARY_MAIN}` : '1px solid #e0e0e0',
+                borderRadius: 2,
+                cursor: 'pointer',
+                backgroundColor: selectedDataSource === 'both' ? `${PRIMARY_MAIN}10` : 'transparent',
+                '&:hover': {
+                  backgroundColor: selectedDataSource === 'both' ? `${PRIMARY_MAIN}20` : '#f5f5f5',
+                }
+              }}
+            >
+              <Typography variant="subtitle1" fontWeight="bold">
+                📄 All Sources (Recommended)
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Sync both PDF documents and website content
+              </Typography>
+            </Box>
+
+            <Box
+              onClick={() => setSelectedDataSource('pdf')}
+              sx={{
+                p: 2,
+                border: selectedDataSource === 'pdf' ? `2px solid ${PRIMARY_MAIN}` : '1px solid #e0e0e0',
+                borderRadius: 2,
+                cursor: 'pointer',
+                backgroundColor: selectedDataSource === 'pdf' ? `${PRIMARY_MAIN}10` : 'transparent',
+                '&:hover': {
+                  backgroundColor: selectedDataSource === 'pdf' ? `${PRIMARY_MAIN}20` : '#f5f5f5',
+                }
+              }}
+            >
+              <Typography variant="subtitle1" fontWeight="bold">
+                📄 PDF Documents Only
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Sync only PDF documents (blood donation guides, eligibility info)
+              </Typography>
+            </Box>
+
+            <Box
+              onClick={() => setSelectedDataSource('web')}
+              sx={{
+                p: 2,
+                border: selectedDataSource === 'web' ? `2px solid ${PRIMARY_MAIN}` : '1px solid #e0e0e0',
+                borderRadius: 2,
+                cursor: 'pointer',
+                backgroundColor: selectedDataSource === 'web' ? `${PRIMARY_MAIN}10` : 'transparent',
+                '&:hover': {
+                  backgroundColor: selectedDataSource === 'web' ? `${PRIMARY_MAIN}20` : '#f5f5f5',
+                }
+              }}
+            >
+              <Typography variant="subtitle1" fontWeight="bold">
+                🌐 Website Content Only
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Sync only America's Blood Centers website content
+              </Typography>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleSyncDialogClose} color="primary">
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleConfirmSync} 
+            color="primary" 
+            variant="contained"
+            disabled={isLoading}
+            sx={{ backgroundColor: PRIMARY_MAIN }}
+          >
+            {isLoading ? 'Starting Sync...' : 'Start Sync'}
           </Button>
         </DialogActions>
       </Dialog>
