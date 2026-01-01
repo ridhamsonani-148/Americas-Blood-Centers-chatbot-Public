@@ -146,7 +146,7 @@ function FAQExamples({ currentLanguage, onFAQClick }) {
             fontSize: { xs: "0.8rem", sm: "0.85rem", md: "0.9rem" }, // Responsive font size
           }}
         >
-          {currentLanguage === "en" ? "Or try these common questions:" : "O prueba estas preguntas comunes:"}
+          {currentLanguage === "en" ? "Or try these frequently asked questions:" : "O prueba estas preguntas frecuentes:"}
         </Typography>
         <Box sx={{ 
           display: "flex", 
@@ -156,11 +156,11 @@ function FAQExamples({ currentLanguage, onFAQClick }) {
           px: { xs: 1, sm: 0 }, // Add padding on mobile
         }}>
           {[
+            currentLanguage === "en" ? "How many people donate blood?" : "¿Cuántas personas donan sangre?",
             currentLanguage === "en" ? "Am I eligible to donate?" : "¿Soy elegible para donar?",
-            currentLanguage === "en" ? "Where can I donate?" : "¿Dónde puedo donar?",
-            currentLanguage === "en" ? "How is the blood supply today?" : "¿Cómo está el suministro de sangre hoy?",
-            currentLanguage === "en" ? "Advocacy & legislation" : "Defensa y legislación",
-            currentLanguage === "en" ? "Is it safe to donate?" : "¿Es seguro donar?",
+            currentLanguage === "en" ? "Where can I donate blood?" : "¿Dónde puedo donar sangre?",
+            currentLanguage === "en" ? "How can I support blood advocacy?" : "¿Cómo puedo apoyar la defensa de la sangre?",
+            currentLanguage === "en" ? "What's the latest blood supply news?" : "¿Cuáles son las últimas noticias del suministro de sangre?",
           ].map((question, index) => (
             <Button
               key={index}

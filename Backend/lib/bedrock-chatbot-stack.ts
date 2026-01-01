@@ -9,12 +9,10 @@ import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as bedrock from 'aws-cdk-lib/aws-bedrock';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as os from 'os';
-import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as stepfunctions from 'aws-cdk-lib/aws-stepfunctions';
 import * as stepfunctionsTasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as amplify from '@aws-cdk/aws-amplify-alpha';
-import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import { opensearchserverless, opensearch_vectorindex } from '@cdklabs/generative-ai-cdk-constructs';
 import { Construct } from 'constructs';
 
@@ -382,138 +380,6 @@ export class BedrockChatbotStack extends cdk.Stack {
         },
       })
     );
-
-    // ===== Lambda Execution Role =====
-    const lambdaRole = new iam.Role(this, 'LambdaExecutionRole', {
-      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-      managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
-      ],
-      inlinePolicies: {
-        BedrockPolicy: new iam.PolicyDocument({
-          statements: [
-            // Bedrock model access for chat
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'bedrock:InvokeModel',
-                'bedrock:InvokeModelWithResponseStream',
-              ],
-              resources: [
-                // Direct foundation model access
-                `arn:aws:bedrock:${this.region}::foundation-model/${modelId}`,
-                `arn:aws:bedrock:${this.region}::foundation-model/${embeddingModelId}`,
-                // Support for all foundation models in current region
-                `arn:aws:bedrock:${this.region}::foundation-model/*`,
-                // Support for cross-region foundation models (needed for inference profiles)
-                `arn:aws:bedrock:*::foundation-model/*`,
-                // Support for global foundation models (no region specified)
-                `arn:aws:bedrock:::foundation-model/*`,
-                // Support for inference profiles
-                `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/*`,
-                `arn:aws:bedrock:*:${this.account}:inference-profile/*`,
-                // Support for cross-region inference profiles (global profiles)
-                `arn:aws:bedrock:*::inference-profile/*`,
-              ],
-            }),
-            // Bedrock Knowledge Base access
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'bedrock:Retrieve',
-                'bedrock:RetrieveAndGenerate',
-              ],
-              resources: [
-                `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`,
-              ],
-            }),
-            // S3 access for documents
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                's3:GetObject',
-                's3:PutObject',
-                's3:DeleteObject',
-                's3:ListBucket',
-                's3:GetBucketLocation',
-              ],
-              resources: [
-                documentsBucket.bucketArn,
-                `${documentsBucket.bucketArn}/*`,
-              ],
-            }),
-          ],
-        }),
-      },
-    });
-
-    // ===== Data Ingestion Lambda Role =====
-    const dataIngestionRole = new iam.Role(this, 'DataIngestionRole', {
-      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-      managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
-      ],
-      inlinePolicies: {
-        DataIngestionPolicy: new iam.PolicyDocument({
-          statements: [
-            // Bedrock Agent access for Knowledge Base operations
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'bedrock-agent:StartIngestionJob',
-                'bedrock-agent:GetIngestionJob',
-                'bedrock-agent:ListIngestionJobs',
-                'bedrock-agent:GetKnowledgeBase',
-                'bedrock-agent:ListKnowledgeBases',
-                'bedrock-agent:GetDataSource',
-                'bedrock-agent:ListDataSources',
-              ],
-              resources: [
-                `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`,
-                `arn:aws:bedrock:${this.region}:${this.account}:data-source/*`,
-              ],
-            }),
-            // Additional Bedrock permissions for ingestion jobs
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'bedrock:StartIngestionJob',
-                'bedrock:GetIngestionJob',
-                'bedrock:ListIngestionJobs',
-              ],
-              resources: [
-                `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`,
-              ],
-            }),
-            // S3 access for document management
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                's3:GetObject',
-                's3:PutObject',
-                's3:DeleteObject',
-                's3:ListBucket',
-                's3:GetBucketLocation',
-              ],
-              resources: [
-                documentsBucket.bucketArn,
-                `${documentsBucket.bucketArn}/*`,
-              ],
-            }),
-            // Web scraping permissions (for external URLs)
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'logs:CreateLogGroup',
-                'logs:CreateLogStream',
-                'logs:PutLogEvents',
-              ],
-              resources: ['*'],
-            }),
-          ],
-        }),
-      },
-    });
 
     // ========================================
     // OpenSearch Serverless Vector Collection (L2 Construct)
@@ -1170,9 +1036,6 @@ export class BedrockChatbotStack extends cdk.Stack {
       description: 'Bedrock Knowledge Base ID',
     });
 
-    // Note: Data source outputs removed to avoid reference errors
-    // Data source IDs will be discovered dynamically in buildspec.yml
-
     new cdk.CfnOutput(this, 'KnowledgeBaseRoleArn', {
       value: knowledgeBaseRole.roleArn,
       description: 'Knowledge Base IAM Role ARN',
@@ -1222,11 +1085,6 @@ export class BedrockChatbotStack extends cdk.Stack {
       value: `https://main.${amplifyApp.appId}.amplifyapp.com`,
       description: 'Amplify App URL',
     });
-
-    // Note: Removed DataIngestionFunctionName and AmplifyDeployerFunctionName outputs
-    // These functions were removed to reduce Lambda count
-    // Added DailySyncLambdaFunctionName for automated daily sync monitoring
-    // Added Amplify app creation to CDK for better resource management
 
     new cdk.CfnOutput(this, 'AdminUserPoolId', {
       value: adminUserPool.userPoolId,

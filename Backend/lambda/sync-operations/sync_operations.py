@@ -23,7 +23,6 @@ def lambda_handler(event, context):
     """
     Handle sync operations called by Step Functions
     """
-    logger.info(f"Sync operation event: {json.dumps(event, indent=2)}")
     
     try:
         operation = event.get('operation')
@@ -49,8 +48,6 @@ def start_sync_job(event):
     Start a sync job for a specific data source type
     """
     source_type = event.get('source_type')  # 'pdf', 'daily', 'web'
-    
-    logger.info(f"Starting sync job for: {source_type}")
     
     # Get all data sources
     data_sources = get_all_data_sources()
@@ -115,8 +112,6 @@ def check_job_status(event):
     job_id = event.get('jobId')
     source_type = event.get('source_type')
     
-    logger.info(f"Checking status for job {job_id} ({source_type})")
-    
     try:
         response = bedrock_agent.get_ingestion_job(
             knowledgeBaseId=KNOWLEDGE_BASE_ID,
@@ -126,8 +121,6 @@ def check_job_status(event):
         
         job = response.get('ingestionJob', {})
         status = job.get('status', 'UNKNOWN')
-        
-        logger.info(f"Job {job_id} status: {status}")
         
         return {
             'success': True,

@@ -20,7 +20,7 @@ const config = {
 
 // Validate configuration
 if (!config.userPoolId || !config.clientId) {
-  console.warn('Cognito configuration missing. Admin authentication will not work.');
+  // Cognito configuration missing. Admin authentication will not work.
 }
 
 // Initialize Cognito client
@@ -62,7 +62,6 @@ class AuthService {
         needsConfirmation: !response.UserConfirmed,
       };
     } catch (error) {
-      console.error('Sign up error:', error);
       return {
         success: false,
         error: this.getErrorMessage(error),
@@ -112,7 +111,6 @@ class AuthService {
         error: 'Authentication failed',
       };
     } catch (error) {
-      console.error('Sign in error:', error);
       return {
         success: false,
         error: this.getErrorMessage(error),
@@ -132,7 +130,6 @@ class AuthService {
       await cognitoClient.send(command);
       return { success: true };
     } catch (error) {
-      console.error('Confirm sign up error:', error);
       return {
         success: false,
         error: this.getErrorMessage(error),
@@ -151,7 +148,6 @@ class AuthService {
       await cognitoClient.send(command);
       return { success: true };
     } catch (error) {
-      console.error('Resend confirmation error:', error);
       return {
         success: false,
         error: this.getErrorMessage(error),
@@ -183,7 +179,6 @@ class AuthService {
       const currentTime = Math.floor(Date.now() / 1000);
       return payload.exp > currentTime;
     } catch (error) {
-      console.error('Token validation error:', error);
       return false;
     }
   }
@@ -208,7 +203,6 @@ class AuthService {
         name: payload.name,
       };
     } catch (error) {
-      console.error('Get user info error:', error);
       return null;
     }
   }

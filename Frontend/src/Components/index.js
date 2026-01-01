@@ -1,8 +1,0 @@
-export { default as AppHeader } from "./AppHeader"
-export { default as LeftNav } from "./LeftNav"
-export { default as ChatHeader } from "./ChatHeader"
-export { default as ChatBody } from "./ChatBody"
-export { default as ChatInput } from "./ChatInput"
-export { default as FAQExamples } from "./FAQExamples"
-export { default as BotReply } from "./BotReply"
-export { default as UserReply } from "./UserReply"

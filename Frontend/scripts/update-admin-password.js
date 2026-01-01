@@ -11,15 +11,12 @@ const path = require('path');
 const newPassword = process.argv[2];
 
 if (!newPassword) {
-  console.error('❌ Error: Please provide a new password');
-  console.log('Usage: node scripts/update-admin-password.js "your-new-password"');
   process.exit(1);
 }
 
 const adminLoginPath = path.join(__dirname, '..', 'src', 'admin', 'AdminLogin.jsx');
 
 if (!fs.existsSync(adminLoginPath)) {
-  console.error('❌ Error: AdminLogin.jsx not found at', adminLoginPath);
   process.exit(1);
 }
 

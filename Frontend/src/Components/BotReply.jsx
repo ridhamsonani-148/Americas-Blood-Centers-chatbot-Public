@@ -2,7 +2,6 @@ import { useState } from "react"
 import { 
   Box, 
   Typography, 
-  Avatar, 
   Link,
   Button
 } from "@mui/material"
@@ -64,37 +63,16 @@ function BotReply({ message, sources = [], currentLanguage }) {
   const remainingSources = sources.length - 3
   return (
     <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 3 }}>
-      {/* Bot Avatar */}
-      <Avatar
-        sx={{
-          width: 36,
-          height: 36,
-          backgroundColor: PRIMARY_MAIN,
-          flexShrink: 0,
-        }}
-      >
-        <img 
-          src="/logo.png" 
-          alt="America's Blood Centers Logo" 
-          style={{ 
-            width: "20px", 
-            height: "20px",
-            objectFit: "contain"
-          }} 
-        />
-      </Avatar>
-
       {/* Message Content with Blue Left Border */}
       <Box 
         sx={{ 
           flex: 1, 
-          maxWidth: "calc(100% - 50px)",
+          maxWidth: "100%",
           borderLeft: `4px solid ${PRIMARY_MAIN}`,
           paddingLeft: "1rem",
           backgroundColor: LIGHT_BACKGROUND,
-          borderRadius: "0 8px 8px 0",
+          borderRadius: "8px",
           padding: "1rem",
-          marginLeft: "0.5rem",
         }}
       >
         {/* Message Text - Rendered with Markdown Support */}

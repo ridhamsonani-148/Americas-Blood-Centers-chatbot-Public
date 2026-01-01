@@ -93,7 +93,6 @@ const AdminPage = ({ onLogout }) => {
       setCurrentPage(page);
       
     } catch (error) {
-      console.error('Error fetching chat history:', error);
       setStatus('Error loading chat history');
     } finally {
       setIsLoading(false);
@@ -159,7 +158,6 @@ const AdminPage = ({ onLogout }) => {
         setStatus(`Error: ${data.error || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('Error triggering sync:', error);
       setStatus(`Error starting ${syncType} sync: ${error.message}`);
     } finally {
       setIsLoading(false);
@@ -198,7 +196,6 @@ const AdminPage = ({ onLogout }) => {
       const data = await response.json();
       setStatus(`Status: ${data.status || 'Unknown'}`);
     } catch (error) {
-      console.error('Error checking status:', error);
       setStatus('Error checking status');
     } finally {
       setIsLoading(false);

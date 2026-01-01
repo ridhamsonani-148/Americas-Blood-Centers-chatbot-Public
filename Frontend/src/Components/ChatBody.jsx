@@ -76,7 +76,6 @@ function ChatBody({ currentLanguage, toggleLanguage, showLeftNav, setLeftNav }) 
         sources: data.sources || []
       }])
     } catch (error) {
-      console.error("Error sending message:", error)
       setMessages(prev => [...prev, { 
         type: "bot", 
         content: "I'm sorry, there was an error processing your request. Please try again.",

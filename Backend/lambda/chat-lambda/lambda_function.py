@@ -9,7 +9,6 @@ import os
 import re
 from typing import Dict, Any, List
 import boto3
-from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
 import uuid
 from decimal import Decimal
@@ -28,16 +27,15 @@ dynamodb = boto3.resource('dynamodb')
 KNOWLEDGE_BASE_ID = os.environ.get('KNOWLEDGE_BASE_ID')
 MODEL_ID = os.environ.get('MODEL_ID', 'global.anthropic.claude-sonnet-4-5-20250929-v1:0')
 MAX_TOKENS = int(os.environ.get('MAX_TOKENS', '1000'))
-TEMPERATURE = float(os.environ.get('TEMPERATURE', '0.0'))  # Minimum temperature for maximum consistency
+TEMPERATURE = float(os.environ.get('TEMPERATURE', '0.0'))
 CHAT_HISTORY_TABLE = os.environ.get('CHAT_HISTORY_TABLE', 'BloodCentersChatHistory')
 
 # Initialize DynamoDB table
 try:
     chat_table = dynamodb.Table(CHAT_HISTORY_TABLE)
-    logger.info(f"✅ Successfully initialized DynamoDB table: {CHAT_HISTORY_TABLE}")
+    logger.info(f"Successfully initialized DynamoDB table: {CHAT_HISTORY_TABLE}")
 except Exception as e:
-    logger.error(f"❌ Could not initialize DynamoDB table {CHAT_HISTORY_TABLE}: {e}")
-    logger.error(f"Exception type: {type(e).__name__}")
+    logger.error(f"Could not initialize DynamoDB table {CHAT_HISTORY_TABLE}: {e}")
     chat_table = None
 
 def convert_dynamodb_item(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -149,71 +147,36 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 })
             }
 
-        logger.info(f"Processing chat request: {user_message[:100]}... (language: {language})")
-        logger.info(f"FULL USER QUERY: {user_message}")  # Log complete user query
+        logger.info(f"Processing chat request (language: {language})")
 
         # Step 1: Retrieve relevant context from Knowledge Base
-        logger.info(f"Retrieving context for query: {user_message}...")
-
         retrieve_response = bedrock_agent_runtime.retrieve(
             knowledgeBaseId=KNOWLEDGE_BASE_ID,
             retrievalQuery={'text': user_message},
             retrievalConfiguration={
                 'vectorSearchConfiguration': {
-                    'numberOfResults': 20,  # Gets top 20 chunks  
-                    'overrideSearchType': 'SEMANTIC'  # Use semantic search only
+                    'numberOfResults': 20,
+                    'overrideSearchType': 'SEMANTIC'
                 }
             }
         )
 
         context_results = retrieve_response.get('retrievalResults', [])
-        logger.info(f"Retrieved {len(context_results)} context results (max 50)")
-
-        # Debug: Log the structure of context results
-        if context_results:
-            logger.info(f"Sample context result structure: {json.dumps(context_results[0], indent=2, default=str)}")
-
-        # Extract sources from context results
         sources = extract_sources(context_results)
-        logger.info(f"Extracted {len(sources)} sources from context results")
-
-        # Debug: Log each context result structure
-        for i, result in enumerate(context_results[:5]):  # Log first 5 results
-            logger.info(f"Context result {i+1}: location={result.get('location', {})}")
-            logger.info(f"Context result {i+1}: metadata keys={list(result.get('metadata', {}).keys())}")
-            if result.get('metadata', {}).get('x-amz-bedrock-kb-source-uri'):
-                logger.info(f"Context result {i+1}: source-uri={result['metadata']['x-amz-bedrock-kb-source-uri']}")
 
         if len(sources) == 0 and len(context_results) > 0:
             logger.warning(f"No sources extracted despite having {len(context_results)} context results!")
-            logger.warning(f"Sample result structure: {json.dumps(context_results[0], indent=2, default=str)}")
 
         # Step 2: Generate response using Bedrock LLM
         response_data = generate_response(user_message, context_results, language)
 
-        # Log Claude's complete response for debugging
-        logger.info(f"CLAUDE RESPONSE LENGTH: {len(response_data['response'])} characters")
-        logger.info(f"CLAUDE FULL RESPONSE: {response_data['response']}")
-
-        # Log model response metadata if available
-        if response_data.get('model_response'):
-            logger.info(f"MODEL METADATA: {json.dumps(response_data['model_response'], indent=2, default=str)}")
-
         # Step 3: Process response for markdown formatting
         processed_response = process_markdown_response(response_data['response'])
-        
-        # Log both raw and processed responses for comparison
-        logger.info(f"RAW CLAUDE RESPONSE: {response_data['response'][:500]}...")
-        logger.info(f"PROCESSED RESPONSE: {processed_response[:500]}...")
 
         # Step 4: Add blood center link if asking about donation locations
         sources = add_blood_center_link_if_needed(user_message, sources)
 
         # Step 5: Save conversation to DynamoDB
-        logger.info(f"About to save conversation to DynamoDB...")
-        logger.info(f"Chat table object: {chat_table}")
-        logger.info(f"Table name from env: {CHAT_HISTORY_TABLE}")
-        
         conversation_id = save_conversation(session_id, user_message, processed_response, language, sources)
         
         # Prepare final response
@@ -235,18 +198,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
 
         # Log what's actually being sent to frontend
-        logger.info(f"FINAL RESPONSE TO FRONTEND: {processed_response}")
-
         logger.info(f"Response generated successfully with {len(sources)} sources")
-
-        # Final summary log for easy tracking
-        logger.info(f"=== CHAT SUMMARY ===")
-        logger.info(f"USER: {user_message}")
-        logger.info(f"LANGUAGE: {language}")
-        logger.info(f"SOURCES COUNT: {len(sources)}")
-        logger.info(f"RESPONSE LENGTH: {len(processed_response)} chars")
-        logger.info(f"MODEL: {MODEL_ID}")
-        logger.info(f"=== END SUMMARY ===")
 
         return {
             'statusCode': 200,
@@ -426,8 +378,6 @@ def handle_sync_request(event: Dict[str, Any], headers: Dict[str, str]) -> Dict[
         sync_type = body.get('sync_type', 'manual')  # 'manual' or 'daily'
         data_source_type = body.get('data_source_type', 'both')  # 'both', 'pdf', 'web', or 'daily'
         
-        logger.info(f"Sync request: type={sync_type}, data_source_type={data_source_type}")
-        
         # Initialize Bedrock Agent client
         bedrock_agent = boto3.client('bedrock-agent')
         
@@ -437,7 +387,6 @@ def handle_sync_request(event: Dict[str, Any], headers: Dict[str, str]) -> Dict[
         )
         
         data_sources = data_sources_response.get('dataSourceSummaries', [])
-        logger.info(f"Found {len(data_sources)} data sources")
         
         # Determine which data sources to sync
         sources_to_sync = []
@@ -483,7 +432,6 @@ def handle_sync_request(event: Dict[str, Any], headers: Dict[str, str]) -> Dict[
             
             # Combine in order: PDF first, then website
             sources_to_sync = pdf_sources + web_sources
-            logger.info(f"Ordered sync: {len(pdf_sources)} PDF sources first, then {len(web_sources)} website sources")
             
             # For manual "both" sync, recommend using sequential sync instead
             if len(sources_to_sync) > 1:
@@ -512,7 +460,6 @@ def handle_sync_request(event: Dict[str, Any], headers: Dict[str, str]) -> Dict[
                     'dataSourceId': ds['dataSourceId'],
                     'ingestionJobId': job_id
                 })
-                logger.info(f"Started ingestion job for {ds['name']}: {job_id}")
                 
             except Exception as e:
                 logger.error(f"Failed to start ingestion job for {ds['name']}: {str(e)}")
@@ -590,12 +537,7 @@ def save_conversation(session_id: str, question: str, answer: str, language: str
         timestamp = datetime.utcnow().isoformat()
         date = datetime.utcnow().strftime('%Y-%m-%d')
         
-        logger.info(f"Attempting to save conversation {conversation_id} to DynamoDB")
-        logger.info(f"Table name: {CHAT_HISTORY_TABLE}")
-        logger.info(f"Session ID: {session_id}")
-        logger.info(f"Sources count: {len(sources)}")
-        
-        # Clean sources for DynamoDB storage (remove uri, score fields that cause JSON errors)
+        # Clean sources for DynamoDB storage
         cleaned_sources = []
         for source in sources:
             cleaned_source = {
@@ -613,34 +555,27 @@ def save_conversation(session_id: str, question: str, answer: str, language: str
             'question': question,
             'answer': answer,
             'language': language,
-            'sources': cleaned_sources,  # Use cleaned sources for DynamoDB
-            'ttl': int((datetime.utcnow() + timedelta(days=90)).timestamp())  # Auto-delete after 90 days
+            'sources': cleaned_sources,
+            'ttl': int((datetime.utcnow() + timedelta(days=90)).timestamp())
         }
-        
-        logger.info(f"DynamoDB item prepared: {json.dumps(item, default=str)[:500]}...")
-        logger.info(f"Answer being saved: {answer[:200]}...")  # Log first 200 chars of answer
         
         # Attempt to save to DynamoDB with retry logic
         max_retries = 3
         for attempt in range(max_retries):
             try:
                 response = chat_table.put_item(Item=item)
-                logger.info(f"DynamoDB put_item response: {response}")
-                logger.info(f"✅ Successfully saved conversation {conversation_id} to DynamoDB (attempt {attempt + 1})")
+                logger.info(f"Successfully saved conversation {conversation_id} to DynamoDB")
                 return conversation_id
             except Exception as put_error:
                 logger.error(f"Put item attempt {attempt + 1} failed: {put_error}")
                 if attempt == max_retries - 1:
                     raise put_error
                 import time
-                time.sleep(1)  # Wait 1 second before retry
+                time.sleep(1)
         
     except Exception as e:
-        logger.error(f"❌ Error saving conversation to DynamoDB: {str(e)}")
-        logger.error(f"Exception type: {type(e).__name__}")
-        import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
-        return str(uuid.uuid4())  # Return a UUID even if save fails
+        logger.error(f"Error saving conversation to DynamoDB: {str(e)}")
+        return str(uuid.uuid4())
 
 def generate_presigned_url(s3_uri: str) -> str:
     """
@@ -678,16 +613,9 @@ def generate_response(user_message: str, context_results: List[Dict[str, Any]], 
     try:
         # Build context from retrieval results
         context_text = build_context_text(context_results)
-
-        # Log the context being used
-        logger.info(f"CONTEXT LENGTH: {len(context_text)} characters")
-        logger.info(f"CONTEXT TEXT: {context_text[:1000]}...")  # First 1000 chars of context
-
+        
         # Create prompt based on language
         prompt = create_prompt(user_message, context_text, language)
-
-        # Log the complete prompt sent to Claude
-        logger.info(f"PROMPT SENT TO CLAUDE: {prompt}")
 
         logger.info(f"Generating response using model: {MODEL_ID}")
 
