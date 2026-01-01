@@ -10,6 +10,7 @@ import * as bedrock from 'aws-cdk-lib/aws-bedrock';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as os from 'os';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as amplify from '@aws-cdk/aws-amplify-alpha';
 import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import { opensearchserverless, opensearch_vectorindex } from '@cdklabs/generative-ai-cdk-constructs';
@@ -78,6 +79,40 @@ export class BedrockChatbotStack extends cdk.Stack {
       versioned: false,
       publicReadAccess: false,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+    });
+
+    // ===== Cognito User Pool for Admin Authentication =====
+    const adminUserPool = new cognito.UserPool(this, 'AdminUserPool', {
+      userPoolName: `${projectName}-admin-user-pool`,
+      selfSignUpEnabled: true, // Allow self-registration
+      signInAliases: {
+        username: true,
+        email: true, // Allow login with email or username
+      },
+      autoVerify: {
+        email: true, // Auto-verify email addresses
+      },
+      passwordPolicy: {
+        minLength: 8,
+        requireLowercase: true,
+        requireUppercase: true,
+        requireDigits: true,
+        requireSymbols: false, // Keep it simple
+      },
+      accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // For dev/test environments
+    });
+
+    // Create User Pool Client for frontend
+    const adminUserPoolClient = new cognito.UserPoolClient(this, 'AdminUserPoolClient', {
+      userPool: adminUserPool,
+      userPoolClientName: `${projectName}-admin-client`,
+      generateSecret: false, // No client secret for frontend apps
+      authFlows: {
+        userPassword: true, // Enable username/password auth
+        userSrp: true, // Enable SRP auth (more secure)
+      },
+      preventUserExistenceErrors: true, // Security best practice
     });
 
     // ===== DynamoDB Table for Chat History =====
@@ -912,6 +947,9 @@ export class BedrockChatbotStack extends cdk.Stack {
         'REACT_APP_API_BASE_URL': api.url,
         'REACT_APP_CHAT_ENDPOINT': api.url,
         'REACT_APP_HEALTH_ENDPOINT': api.url,
+        'REACT_APP_USER_POOL_ID': adminUserPool.userPoolId,
+        'REACT_APP_USER_POOL_CLIENT_ID': adminUserPoolClient.userPoolClientId,
+        'REACT_APP_AWS_REGION': this.region,
       },
       platform: amplify.Platform.WEB,
       autoBranchCreation: {
@@ -936,6 +974,9 @@ export class BedrockChatbotStack extends cdk.Stack {
         'REACT_APP_API_BASE_URL': api.url,
         'REACT_APP_CHAT_ENDPOINT': api.url,
         'REACT_APP_HEALTH_ENDPOINT': api.url,
+        'REACT_APP_USER_POOL_ID': adminUserPool.userPoolId,
+        'REACT_APP_USER_POOL_CLIENT_ID': adminUserPoolClient.userPoolClientId,
+        'REACT_APP_AWS_REGION': this.region,
       },
     });
 
@@ -1022,6 +1063,16 @@ export class BedrockChatbotStack extends cdk.Stack {
     // These functions were removed to reduce Lambda count
     // Added DailySyncLambdaFunctionName for automated daily sync monitoring
     // Added Amplify app creation to CDK for better resource management
+
+    new cdk.CfnOutput(this, 'AdminUserPoolId', {
+      value: adminUserPool.userPoolId,
+      description: 'Cognito User Pool ID for Admin Authentication',
+    });
+
+    new cdk.CfnOutput(this, 'AdminUserPoolClientId', {
+      value: adminUserPoolClient.userPoolClientId,
+      description: 'Cognito User Pool Client ID for Admin Authentication',
+    });
 
     new cdk.CfnOutput(this, 'ProjectName', {
       value: projectName,

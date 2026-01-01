@@ -191,6 +191,9 @@ phases:
             echo "REACT_APP_API_BASE_URL=$API_URL" > .env.production
             echo "REACT_APP_CHAT_ENDPOINT=$API_URL" >> .env.production
             echo "REACT_APP_HEALTH_ENDPOINT=$API_URL" >> .env.production
+            echo "REACT_APP_USER_POOL_ID=$(cat ../Backend/outputs.json | jq -r '.AmericasBloodCentersBedrockStack.AdminUserPoolId // empty')" >> .env.production
+            echo "REACT_APP_USER_POOL_CLIENT_ID=$(cat ../Backend/outputs.json | jq -r '.AmericasBloodCentersBedrockStack.AdminUserPoolClientId // empty')" >> .env.production
+            echo "REACT_APP_AWS_REGION=$CDK_DEFAULT_REGION" >> .env.production
             echo "PUBLIC_URL=" >> .env.production
             echo "GENERATE_SOURCEMAP=false" >> .env.production
             

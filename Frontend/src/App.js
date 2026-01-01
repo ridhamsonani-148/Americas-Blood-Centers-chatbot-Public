@@ -13,11 +13,13 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<MainChat />} />
-          <Route path="/admin" element={<AdminWrapper />} />
+          <Route path="/admin/*" element={<AdminWrapper />} />
         </Routes>
       </Router>
     </ThemeProvider>
   )
 }
+
+export default App
 
 export default App
