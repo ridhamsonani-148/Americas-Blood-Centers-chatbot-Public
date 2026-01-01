@@ -306,7 +306,7 @@ def handle_admin_request(event: Dict[str, Any], headers: Dict[str, str]) -> Dict
 
 def get_conversations(query_params: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
     """
-    Get chat conversations with pagination and filtering
+    Get chat conversations with efficient DynamoDB pagination and filtering
     """
     try:
         if not chat_table:
@@ -320,68 +320,77 @@ def get_conversations(query_params: Dict[str, Any], headers: Dict[str, str]) -> 
             }
         
         # Parse query parameters
-        page = int(query_params.get('page', 1))
-        limit = int(query_params.get('limit', 10))
+        limit = min(int(query_params.get('limit', 50)), 100)  # Max 100 items per request
+        last_evaluated_key = query_params.get('lastEvaluatedKey')
         date_filter = query_params.get('date')
         language_filter = query_params.get('language')
         
-        # Calculate offset
-        offset = (page - 1) * limit
-        
         # Build scan parameters
         scan_params = {
-            'Limit': limit + offset,  # We'll slice later for proper pagination
+            'Limit': limit,
             'Select': 'ALL_ATTRIBUTES'
         }
+        
+        # Add pagination token if provided
+        if last_evaluated_key:
+            try:
+                import json as json_lib
+                scan_params['ExclusiveStartKey'] = json_lib.loads(last_evaluated_key)
+            except Exception as e:
+                logger.warning(f"Invalid lastEvaluatedKey: {e}")
         
         # Add filters
         filter_expressions = []
         expression_values = {}
+        expression_names = {}
         
         if date_filter:
             filter_expressions.append('begins_with(#date, :date)')
             expression_values[':date'] = date_filter
-            scan_params['ExpressionAttributeNames'] = {'#date': 'date'}
+            expression_names['#date'] = 'date'
         
         if language_filter:
             filter_expressions.append('#lang = :lang')
             expression_values[':lang'] = language_filter
-            if 'ExpressionAttributeNames' not in scan_params:
-                scan_params['ExpressionAttributeNames'] = {}
-            scan_params['ExpressionAttributeNames']['#lang'] = 'language'
+            expression_names['#lang'] = 'language'
         
         if filter_expressions:
             scan_params['FilterExpression'] = ' AND '.join(filter_expressions)
             scan_params['ExpressionAttributeValues'] = expression_values
+            scan_params['ExpressionAttributeNames'] = expression_names
         
         # Scan the table
         response = chat_table.scan(**scan_params)
         items = response.get('Items', [])
         
-        # Sort by timestamp (newest first)
+        # Sort by timestamp (newest first) - Note: This limits the effectiveness of pagination
+        # For better performance, consider using a GSI with timestamp as sort key
         items.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-        
-        # Apply pagination
-        paginated_items = items[offset:offset + limit]
         
         # Format conversations for frontend
         conversations = []
-        for item in paginated_items:
+        for item in items:
             # Convert DynamoDB item to regular Python types
             conversation = convert_dynamodb_item(item)
             conversations.append(conversation)
         
+        # Prepare response
+        response_data = {
+            'success': True,
+            'conversations': conversations,
+            'limit': limit,
+            'hasMore': 'LastEvaluatedKey' in response
+        }
+        
+        # Include pagination token for next request
+        if 'LastEvaluatedKey' in response:
+            import json as json_lib
+            response_data['lastEvaluatedKey'] = json_lib.dumps(response['LastEvaluatedKey'])
+        
         return {
             'statusCode': 200,
             'headers': headers,
-            'body': json.dumps({
-                'success': True,
-                'conversations': conversations,
-                'total': len(items),
-                'page': page,
-                'limit': limit,
-                'hasMore': len(items) > offset + limit
-            })
+            'body': json.dumps(response_data)
         }
         
     except Exception as e:
