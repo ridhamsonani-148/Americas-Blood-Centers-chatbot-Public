@@ -34,8 +34,13 @@ CHAT_HISTORY_TABLE = os.environ.get('CHAT_HISTORY_TABLE', 'BloodCentersChatHisto
 # Initialize DynamoDB table
 try:
     chat_table = dynamodb.Table(CHAT_HISTORY_TABLE)
+    logger.info(f"✅ Successfully initialized DynamoDB table: {CHAT_HISTORY_TABLE}")
+    # Test table access
+    table_description = chat_table.table_status
+    logger.info(f"DynamoDB table status: {table_description}")
 except Exception as e:
-    logger.warning(f"Could not initialize DynamoDB table {CHAT_HISTORY_TABLE}: {e}")
+    logger.error(f"❌ Could not initialize DynamoDB table {CHAT_HISTORY_TABLE}: {e}")
+    logger.error(f"Exception type: {type(e).__name__}")
     chat_table = None
 
 def convert_dynamodb_item(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -204,6 +209,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         sources = add_blood_center_link_if_needed(user_message, sources)
 
         # Step 5: Save conversation to DynamoDB
+        logger.info(f"About to save conversation to DynamoDB...")
+        logger.info(f"Chat table object: {chat_table}")
+        logger.info(f"Table name from env: {CHAT_HISTORY_TABLE}")
+        
         conversation_id = save_conversation(session_id, user_message, processed_response, language, sources)
         
         # Prepare final response
@@ -422,12 +431,25 @@ def save_conversation(session_id: str, question: str, answer: str, language: str
     """
     try:
         if not chat_table:
-            logger.warning("Chat table not available, skipping conversation save")
+            logger.error("Chat table not available, skipping conversation save")
             return str(uuid.uuid4())
         
         conversation_id = str(uuid.uuid4())
         timestamp = datetime.utcnow().isoformat()
         date = datetime.utcnow().strftime('%Y-%m-%d')
+        
+        logger.info(f"Attempting to save conversation {conversation_id} to DynamoDB")
+        logger.info(f"Table name: {CHAT_HISTORY_TABLE}")
+        logger.info(f"Session ID: {session_id}")
+        logger.info(f"Sources count: {len(sources)}")
+        
+        # Test table accessibility first
+        try:
+            table_status = chat_table.table_status
+            logger.info(f"Table status check: {table_status}")
+        except Exception as table_check_error:
+            logger.error(f"Table accessibility check failed: {table_check_error}")
+            raise table_check_error
         
         # Clean sources for DynamoDB storage (remove uri, score fields that cause JSON errors)
         cleaned_sources = []
@@ -451,12 +473,28 @@ def save_conversation(session_id: str, question: str, answer: str, language: str
             'ttl': int((datetime.utcnow() + timedelta(days=90)).timestamp())  # Auto-delete after 90 days
         }
         
-        chat_table.put_item(Item=item)
-        logger.info(f"Saved conversation {conversation_id} to DynamoDB")
-        return conversation_id
+        logger.info(f"DynamoDB item prepared: {json.dumps(item, default=str)[:500]}...")
+        
+        # Attempt to save to DynamoDB with retry logic
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = chat_table.put_item(Item=item)
+                logger.info(f"DynamoDB put_item response: {response}")
+                logger.info(f"✅ Successfully saved conversation {conversation_id} to DynamoDB (attempt {attempt + 1})")
+                return conversation_id
+            except Exception as put_error:
+                logger.error(f"Put item attempt {attempt + 1} failed: {put_error}")
+                if attempt == max_retries - 1:
+                    raise put_error
+                import time
+                time.sleep(1)  # Wait 1 second before retry
         
     except Exception as e:
-        logger.error(f"Error saving conversation: {str(e)}")
+        logger.error(f"❌ Error saving conversation to DynamoDB: {str(e)}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return str(uuid.uuid4())  # Return a UUID even if save fails
 
 def generate_presigned_url(s3_uri: str) -> str:
