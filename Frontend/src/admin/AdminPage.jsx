@@ -18,6 +18,7 @@ import {
   Chip,
   TextField,
   MenuItem,
+  Pagination,
   AppBar,
   Toolbar,
   Container,
@@ -44,10 +45,10 @@ const AdminPage = ({ onLogout }) => {
   
   // Chat history state
   const [conversations, setConversations] = useState([]);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [lastEvaluatedKey, setLastEvaluatedKey] = useState(null);
-  const [pageSize] = useState(50);
+  const [totalConversations, setTotalConversations] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(10);
   const [dateFilter, setDateFilter] = useState('');
   const [languageFilter, setLanguageFilter] = useState('');
   
@@ -62,27 +63,16 @@ const AdminPage = ({ onLogout }) => {
   // Get API URL from environment
   const API_URL = process.env.REACT_APP_API_BASE_URL || process.env.REACT_APP_CHAT_ENDPOINT;
 
-  // Fetch chat history with pagination
-  const fetchChatHistory = useCallback(async (isLoadMore = false, filters = {}) => {
-    if (isLoadMore) {
-      setIsLoadingMore(true);
-    } else {
-      setIsLoading(true);
-      setConversations([]); // Clear existing conversations for new search
-      setLastEvaluatedKey(null);
-      setHasMore(true);
-    }
-
+  // Fetch chat history with page-based pagination
+  const fetchChatHistory = useCallback(async (page = 1, filters = {}) => {
+    setIsLoading(true);
+    
     try {
       const queryParams = new URLSearchParams({
+        page: page.toString(),
         limit: pageSize.toString(),
         ...filters
       });
-
-      // Add pagination token for "Load More"
-      if (isLoadMore && lastEvaluatedKey) {
-        queryParams.append('lastEvaluatedKey', lastEvaluatedKey);
-      }
 
       const response = await fetch(`${API_URL}/admin/conversations?${queryParams}`, {
         method: 'GET',
@@ -97,25 +87,18 @@ const AdminPage = ({ onLogout }) => {
 
       const data = await response.json();
       
-      if (isLoadMore) {
-        // Append new conversations to existing ones
-        setConversations(prev => [...prev, ...(data.conversations || [])]);
-      } else {
-        // Replace conversations for new search
-        setConversations(data.conversations || []);
-      }
-      
-      setHasMore(data.hasMore || false);
-      setLastEvaluatedKey(data.lastEvaluatedKey || null);
+      setConversations(data.conversations || []);
+      setTotalConversations(data.total || 0);
+      setTotalPages(data.totalPages || 0);
+      setCurrentPage(page);
       
     } catch (error) {
       console.error('Error fetching chat history:', error);
       setStatus('Error loading chat history');
     } finally {
       setIsLoading(false);
-      setIsLoadingMore(false);
     }
-  }, [API_URL, pageSize, lastEvaluatedKey]);
+  }, [API_URL, pageSize]);
 
   // Load chat history when tab changes or filters change
   useEffect(() => {
@@ -123,18 +106,17 @@ const AdminPage = ({ onLogout }) => {
       const filters = {};
       if (dateFilter) filters.date = dateFilter;
       if (languageFilter) filters.language = languageFilter;
-      fetchChatHistory(false, filters); // false = not loading more, it's a new search
+      fetchChatHistory(1, filters); // Always start from page 1 when filters change
+      setCurrentPage(1);
     }
   }, [activeTab, dateFilter, languageFilter, fetchChatHistory]);
 
-  // Handle loading more conversations
-  const handleLoadMore = () => {
-    if (hasMore && !isLoadingMore) {
-      const filters = {};
-      if (dateFilter) filters.date = dateFilter;
-      if (languageFilter) filters.language = languageFilter;
-      fetchChatHistory(true, filters); // true = loading more
-    }
+  // Handle page change
+  const handlePageChange = (event, page) => {
+    const filters = {};
+    if (dateFilter) filters.date = dateFilter;
+    if (languageFilter) filters.language = languageFilter;
+    fetchChatHistory(page, filters);
   };
 
   const triggerDataSync = async (syncType, dataSourceType = null) => {
@@ -501,34 +483,32 @@ const AdminPage = ({ onLogout }) => {
               </Box>
             )}
 
-            {isLoading && conversations.length === 0 && (
+            {isLoading && (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
                 <CircularProgress />
               </Box>
             )}
 
-            {/* Load More Button */}
-            {hasMore && conversations.length > 0 && (
+            {/* Pagination */}
+            {totalPages > 1 && (
               <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                <Button
-                  variant="outlined"
-                  onClick={handleLoadMore}
-                  disabled={isLoadingMore}
-                  startIcon={isLoadingMore ? <CircularProgress size={16} /> : null}
-                  sx={{ minWidth: 120 }}
-                >
-                  {isLoadingMore ? 'Loading...' : 'Load More'}
-                </Button>
+                <Pagination
+                  count={totalPages}
+                  page={currentPage}
+                  onChange={handlePageChange}
+                  color="primary"
+                  showFirstButton
+                  showLastButton
+                />
               </Box>
             )}
 
             {/* Summary */}
             <Box sx={{ mt: 2, textAlign: 'center' }}>
               <Typography variant="body2" color="textSecondary">
-                {conversations.length > 0 ? (
+                {totalConversations > 0 ? (
                   <>
-                    Showing {conversations.length} conversations
-                    {hasMore ? ' (more available)' : ' (all loaded)'}
+                    Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalConversations)} of {totalConversations} conversations
                   </>
                 ) : (
                   'No conversations to display'

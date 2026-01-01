@@ -306,7 +306,7 @@ def handle_admin_request(event: Dict[str, Any], headers: Dict[str, str]) -> Dict
 
 def get_conversations(query_params: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
     """
-    Get chat conversations with efficient DynamoDB pagination and filtering
+    Get chat conversations with page-based pagination and filtering
     """
     try:
         if not chat_table:
@@ -320,24 +320,18 @@ def get_conversations(query_params: Dict[str, Any], headers: Dict[str, str]) -> 
             }
         
         # Parse query parameters
-        limit = min(int(query_params.get('limit', 50)), 100)  # Max 100 items per request
-        last_evaluated_key = query_params.get('lastEvaluatedKey')
+        page = int(query_params.get('page', 1))
+        limit = min(int(query_params.get('limit', 10)), 100)  # Default 10, max 100 items per request
         date_filter = query_params.get('date')
         language_filter = query_params.get('language')
         
-        # Build scan parameters
+        # Calculate offset for page-based pagination
+        offset = (page - 1) * limit
+        
+        # Build scan parameters - we need to get more items to support pagination
         scan_params = {
-            'Limit': limit,
             'Select': 'ALL_ATTRIBUTES'
         }
-        
-        # Add pagination token if provided
-        if last_evaluated_key:
-            try:
-                import json as json_lib
-                scan_params['ExclusiveStartKey'] = json_lib.loads(last_evaluated_key)
-            except Exception as e:
-                logger.warning(f"Invalid lastEvaluatedKey: {e}")
         
         # Add filters
         filter_expressions = []
@@ -359,17 +353,29 @@ def get_conversations(query_params: Dict[str, Any], headers: Dict[str, str]) -> 
             scan_params['ExpressionAttributeValues'] = expression_values
             scan_params['ExpressionAttributeNames'] = expression_names
         
-        # Scan the table
+        # Scan the table to get all items (for accurate pagination)
         response = chat_table.scan(**scan_params)
         items = response.get('Items', [])
         
-        # Sort by timestamp (newest first) - Note: This limits the effectiveness of pagination
-        # For better performance, consider using a GSI with timestamp as sort key
+        # Continue scanning if there are more items
+        while 'LastEvaluatedKey' in response:
+            scan_params['ExclusiveStartKey'] = response['LastEvaluatedKey']
+            response = chat_table.scan(**scan_params)
+            items.extend(response.get('Items', []))
+        
+        # Sort by timestamp (newest first)
         items.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        
+        # Calculate pagination
+        total_items = len(items)
+        total_pages = (total_items + limit - 1) // limit  # Ceiling division
+        
+        # Apply pagination
+        paginated_items = items[offset:offset + limit]
         
         # Format conversations for frontend
         conversations = []
-        for item in items:
+        for item in paginated_items:
             # Convert DynamoDB item to regular Python types
             conversation = convert_dynamodb_item(item)
             conversations.append(conversation)
@@ -378,14 +384,12 @@ def get_conversations(query_params: Dict[str, Any], headers: Dict[str, str]) -> 
         response_data = {
             'success': True,
             'conversations': conversations,
+            'page': page,
             'limit': limit,
-            'hasMore': 'LastEvaluatedKey' in response
+            'total': total_items,
+            'totalPages': total_pages,
+            'hasMore': page < total_pages
         }
-        
-        # Include pagination token for next request
-        if 'LastEvaluatedKey' in response:
-            import json as json_lib
-            response_data['lastEvaluatedKey'] = json_lib.dumps(response['LastEvaluatedKey'])
         
         return {
             'statusCode': 200,
