@@ -56,12 +56,9 @@ def convert_dynamodb_item(item: Dict[str, Any]) -> Dict[str, Any]:
     return {
         'id': item.get('conversation_id'),
         'sessionId': item.get('session_id'),
-        'message': item.get('question', ''),
         'question': item.get('question', ''),
-        'response': item.get('answer', ''),
         'answer': item.get('answer', ''),
         'timestamp': item.get('timestamp'),
-        'created_at': item.get('timestamp'),
         'date': item.get('date'),
         'language': item.get('language', 'en'),
         'sources': convert_value(item.get('sources', []))
@@ -619,27 +616,18 @@ def generate_response(user_message: str, context_results: List[Dict[str, Any]], 
 
         logger.info(f"Generating response using model: {MODEL_ID}")
 
-        # Prepare request body based on model type
-        if 'claude' in MODEL_ID.lower():
-            request_body = {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                "max_tokens": MAX_TOKENS,
-                "temperature": TEMPERATURE,
-                "anthropic_version": "bedrock-2023-05-31"
-            }
-        else:
-            # For other models (Llama, etc.)
-            request_body = {
-                "prompt": prompt,
-                "max_gen_len": MAX_TOKENS,
-                "temperature": TEMPERATURE,
-                "top_p": 0.9
-            }
+        # Prepare request body for Claude models
+        request_body = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "max_tokens": MAX_TOKENS,
+            "temperature": TEMPERATURE,
+            "anthropic_version": "bedrock-2023-05-31"
+        }
 
         # Invoke the model
         response = bedrock_runtime.invoke_model(
@@ -649,13 +637,9 @@ def generate_response(user_message: str, context_results: List[Dict[str, Any]], 
             accept='application/json'
         )
 
-        # Parse response based on model type
+        # Parse response
         response_body = json.loads(response['body'].read())
-
-        if 'claude' in MODEL_ID.lower():
-            generated_text = response_body['content'][0]['text']
-        else:
-            generated_text = response_body.get('generation', response_body.get('outputs', [{}])[0].get('text', ''))
+        generated_text = response_body['content'][0]['text']
 
         logger.info(f"Response generated successfully: {len(generated_text)} characters")
 

@@ -12,8 +12,8 @@ clean_url=${GITHUB_URL%.git}
 clean_url=${clean_url%/}
 
 if [ -z "${PROJECT_NAME:-}" ]; then
-  read -rp "Enter project name [default: abc]: " PROJECT_NAME
-  PROJECT_NAME=${PROJECT_NAME:-abc}
+  read -rp "Enter project name [default: blood-centers]: " PROJECT_NAME
+  PROJECT_NAME=${PROJECT_NAME:-blood-centers}
 fi
 
 if [ -z "${MODEL_ID:-}" ]; then

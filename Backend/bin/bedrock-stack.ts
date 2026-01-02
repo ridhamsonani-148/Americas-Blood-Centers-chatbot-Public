@@ -6,12 +6,12 @@ import { BedrockChatbotStack } from '../lib/bedrock-chatbot-stack';
 const app = new cdk.App();
 
 new BedrockChatbotStack(app, 'AmericasBloodCentersBedrockStack', {
-  projectName: app.node.tryGetContext('projectName') || 'abc',
-  modelId: app.node.tryGetContext('modelId') || 'global.anthropic.claude-sonnet-4-5-20250929-v1:0',
-  embeddingModelId: app.node.tryGetContext('embeddingModelId') || 'amazon.titan-embed-text-v1',
+  projectName: app.node.tryGetContext('projectName') ,
+  modelId: app.node.tryGetContext('modelId') ,
+  embeddingModelId: app.node.tryGetContext('embeddingModelId'),
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: process.env.CDK_DEFAULT_REGION || 'us-east-1',
+    region: process.env.CDK_DEFAULT_REGION ,
   },
   description: 'America\'s Blood Centers Chatbot using Bedrock Knowledge Base and Foundation Models',
   tags: {

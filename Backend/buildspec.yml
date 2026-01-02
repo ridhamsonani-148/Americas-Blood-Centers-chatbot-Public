@@ -25,7 +25,7 @@ phases:
       - |
         # Set default PROJECT_NAME for bootstrap if not provided
         if [ -z "$PROJECT_NAME" ]; then
-          PROJECT_NAME="abc"
+          PROJECT_NAME="blood-centers"
         fi
         cdk bootstrap --require-approval never \
           --context projectName="$PROJECT_NAME" \
@@ -52,7 +52,7 @@ phases:
           
           # Set default PROJECT_NAME if not provided
           if [ -z "$PROJECT_NAME" ]; then
-            PROJECT_NAME="abc"
+            PROJECT_NAME="blood-centers"
             echo "🔍 Using default PROJECT_NAME: $PROJECT_NAME"
           else
             echo "🔍 Using provided PROJECT_NAME: $PROJECT_NAME"

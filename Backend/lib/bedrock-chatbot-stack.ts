@@ -39,7 +39,7 @@ export class BedrockChatbotStack extends cdk.Stack {
         : lambda.Architecture.X86_64;
     console.log(`Lambda architecture: ${lambdaArchitecture}`);
 
-    const projectName = props.projectName || 'abc';
+    const projectName = props.projectName || 'blood-centers';
     const modelId = props.modelId || 'global.anthropic.claude-sonnet-4-5-20250929-v1:0';
     const embeddingModelId = props.embeddingModelId || 'amazon.titan-embed-text-v1';
 
@@ -424,7 +424,7 @@ export class BedrockChatbotStack extends cdk.Stack {
 
     // Create the Knowledge Base with OpenSearch Serverless vector store
     const knowledgeBase = new bedrock.CfnKnowledgeBase(this, "BloodCentersKnowledgeBase", {
-      name: `BloodCentersKnowledgeBase-${cdk.Names.uniqueId(this).slice(-8)}`,
+      name: `BloodCentersKnowledgeBase`,
       description: "Knowledge base for America's Blood Centers containing blood donation information, eligibility criteria, and center locations",
       roleArn: knowledgeBaseRole.roleArn,
       knowledgeBaseConfiguration: {
@@ -476,7 +476,7 @@ export class BedrockChatbotStack extends cdk.Stack {
     // ========================================
 
     const dataSource = new bedrock.CfnDataSource(this, "BloodCentersDataSource", {
-      name: "BloodCentersDocuments-v2",
+      name: "BloodCentersDocuments",
       description: "America's Blood Centers PDF documents including donation guides, eligibility information, and blood supply data",
       knowledgeBaseId: knowledgeBase.attrKnowledgeBaseId,
       dataSourceConfiguration: {
@@ -513,7 +513,7 @@ export class BedrockChatbotStack extends cdk.Stack {
     // Web Crawler Data Source for America's Blood Centers Website
     // ========================================
     const webCrawlerDataSource = new bedrock.CfnDataSource(this, "BloodCentersWebCrawlerDataSource", {
-      name: "BloodCentersWebsite-v2",
+      name: "BloodCentersWebsite",
       description: "Web crawler for America's Blood Centers website including donation information and blood center locations",
       knowledgeBaseId: knowledgeBase.attrKnowledgeBaseId,
       dataSourceConfiguration: {
@@ -572,7 +572,7 @@ export class BedrockChatbotStack extends cdk.Stack {
     // Daily Sync Data Source for Specific URLs
     // ========================================
     const dailySyncDataSource = new bedrock.CfnDataSource(this, "BloodCentersDailySyncDataSource", {
-      name: "BloodCentersDailySync-v2",
+      name: "BloodCentersDailySync",
       description: "Daily sync data source for specific blood donation pages that update frequently",
       knowledgeBaseId: knowledgeBase.attrKnowledgeBaseId,
       dataSourceConfiguration: {
@@ -859,9 +859,9 @@ export class BedrockChatbotStack extends cdk.Stack {
     // ===== EventBridge Rule for Daily Sync =====
     const dailySyncRule = new events.Rule(this, 'DailySyncRule', {
       ruleName: `${projectName}-daily-sync-rule`,
-      description: 'Triggers daily sync of blood centers daily data source at 2 AM UTC',
+      description: 'Triggers daily sync of blood centers daily data source at 2 PM EST (7 PM UTC)',
       schedule: events.Schedule.cron({ 
-        hour: '2',    // 2 AM UTC
+        hour: '19',   // 7 PM UTC = 2 PM EST
         minute: '0',  // At the top of the hour
         day: '*',     // Every day
         month: '*',   // Every month
