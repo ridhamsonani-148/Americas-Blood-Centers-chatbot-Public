@@ -39,9 +39,9 @@ export class BedrockChatbotStack extends cdk.Stack {
         : lambda.Architecture.X86_64;
     console.log(`Lambda architecture: ${lambdaArchitecture}`);
 
-    const projectName = props.projectName || 'blood-centers';
-    const modelId = props.modelId || 'global.anthropic.claude-sonnet-4-5-20250929-v1:0';
-    const embeddingModelId = props.embeddingModelId || 'amazon.titan-embed-text-v1';
+    const projectName = props.projectName ;
+    const modelId = props.modelId ;
+    const embeddingModelId = props.embeddingModelId;
 
     // ===== S3 Bucket for Documents =====
     const documentsBucket = new s3.Bucket(this, 'DocumentsBucket', {
@@ -926,15 +926,6 @@ export class BedrockChatbotStack extends cdk.Stack {
     // Health check endpoint
     const healthResource = api.root.addResource('health');
     healthResource.addMethod('GET', chatIntegration);
-
-    // Note: Amplify deployment is handled directly in buildspec.yml
-    // AmplifyDeployerLambda removed to reduce Lambda function count
-    
-    // Note: Data ingestion is handled directly in buildspec.yml for initial deployment
-    // DataIngestionLambda removed to reduce Lambda function count
-    
-    // Note: Daily sync is now automated via EventBridge + DailySyncLambda
-    // Runs daily at 2 AM UTC to sync the daily-sync data source only
 
     // ===== Deploy Initial Documents =====
     // Deploy text files to root level (no folder)
