@@ -729,7 +729,7 @@ Answer:"""
 
 def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Extract source information from context results with enhanced URL handling
+    Extract source information from context results with enhanced URL handling and pagination normalization
     """
     sources = []
 
@@ -750,7 +750,6 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
                 # Extract filename for title
                 if 'pdfs/' in s3_uri:
                     filename = s3_uri.split('/')[-1]
-                    # Keep original filename (don't convert to title case)
                     source_title = filename.replace('.pdf', '')
                 else:
                     filename = s3_uri.split('/')[-1] if '/' in s3_uri else s3_uri
@@ -771,25 +770,31 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
 
             if source_url and 's3://' in source_url:
                 filename = source_url.split('/')[-1] if '/' in source_url else source_url
-                # Keep original filename for PDFs (don't convert to title case)
                 source_title = filename.replace('.pdf', '')
             else:
                 source_title = metadata.get('title', metadata.get('source', 'Document'))
 
         # Add source if we found a URL
         if source_url:
+            # Normalize paginated URLs to base URL
+            normalized_url = normalize_paginated_url(source_url)
+            
             # Determine source type
             is_document = any(ext in source_url.lower() for ext in ['.pdf', '.docx', '.txt']) or 's3://' in source_url
 
             # Generate presigned URL for S3 documents
-            accessible_url = source_url
+            accessible_url = normalized_url
             if source_url.startswith('s3://'):
                 accessible_url = generate_presigned_url(source_url)
                 logger.info(f"Converted S3 URI to presigned URL: {source_url} -> {accessible_url[:100]}...")
 
+            # Update title for normalized URLs
+            if normalized_url != source_url:
+                source_title = get_normalized_title(normalized_url, source_title)
+
             sources.append({
                 "title": source_title or f"Source {len(sources) + 1}",
-                "url": accessible_url,  # Use presigned URL for accessibility
+                "url": accessible_url,
                 "uri": source_url,  # Keep original URI for reference
                 "type": "DOCUMENT" if is_document else "WEB",
                 "score": result.get('score', 0)
@@ -797,12 +802,12 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
 
             logger.info(f"Extracted source: {source_title} - {accessible_url[:100]}...")
 
-    # Enhanced deduplication logic - prefer public URLs over S3 presigned URLs
+    # Enhanced deduplication logic - prefer public URLs over S3 presigned URLs and normalize paginated URLs
     unique_sources = []
     seen_documents = {}
 
     for source in sorted(sources, key=lambda x: x.get('score', 0), reverse=True):
-        # Create a unique key for the document (filename-based)
+        # Create a unique key for the document (filename-based for S3, normalized URL for web)
         doc_key = None
 
         # Extract filename for deduplication key
@@ -813,16 +818,16 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
             else:
                 doc_key = source['url'].split('/')[-1].split('?')[0].lower()  # Remove query params
         else:
-            # Web URL - extract filename from URL
+            # Web URL - use normalized URL as key to deduplicate paginated pages
+            normalized_url = normalize_paginated_url(source['url'])
             try:
                 from urllib.parse import urlparse
-                parsed = urlparse(source['url'])
-                doc_key = parsed.path.split('/')[-1].lower()
-                if not doc_key or doc_key == '':
-                    # If no filename, use the full path
-                    doc_key = f"{parsed.netloc}{parsed.path}".lower()
+                parsed = urlparse(normalized_url)
+                doc_key = f"{parsed.netloc}{parsed.path}".lower()
+                # Remove trailing slash for consistency
+                doc_key = doc_key.rstrip('/')
             except:
-                doc_key = source['url'].lower()
+                doc_key = normalized_url.lower()
 
         if doc_key and doc_key not in seen_documents:
             unique_sources.append(source)
@@ -850,6 +855,72 @@ def extract_sources(context_results: List[Dict[str, Any]]) -> List[Dict[str, Any
 
     logger.info(f"Final sources count: {len(unique_sources)} (reduced from {len(sources)})")
     return unique_sources
+
+def normalize_paginated_url(url: str) -> str:
+    """
+    Normalize paginated URLs to their base URL
+    Examples:
+    - https://americasblood.org/news/paged-2/5/ -> https://americasblood.org/news/
+    - https://americasblood.org/news/page/2/ -> https://americasblood.org/news/
+    - https://americasblood.org/category/updates/page/3/ -> https://americasblood.org/category/updates/
+    """
+    if not url:
+        return url
+    
+    # Common pagination patterns to remove
+    pagination_patterns = [
+        r'/paged-\d+/\d+/?$',  # /paged-2/5/
+        r'/page/\d+/?$',       # /page/2/
+        r'/p\d+/?$',           # /p2/
+        r'\?page=\d+',         # ?page=2
+        r'&page=\d+',          # &page=2
+        r'\?p=\d+',            # ?p=2
+        r'&p=\d+',             # &p=2
+    ]
+    
+    normalized_url = url
+    for pattern in pagination_patterns:
+        normalized_url = re.sub(pattern, '', normalized_url)
+    
+    # Clean up any trailing slashes or query parameters that might be left
+    normalized_url = normalized_url.rstrip('/')
+    
+    # If we removed pagination and the URL doesn't end with a meaningful path, add trailing slash
+    if normalized_url and not normalized_url.endswith(('.html', '.htm', '.php', '.aspx')):
+        normalized_url += '/'
+    
+    return normalized_url
+
+def get_normalized_title(normalized_url: str, original_title: str) -> str:
+    """
+    Get an appropriate title for a normalized URL
+    """
+    if not normalized_url:
+        return original_title
+    
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(normalized_url)
+        path = parsed.path.strip('/')
+        
+        # Create a clean title based on the normalized URL path
+        if '/news' in path:
+            return "America's Blood Centers - News"
+        elif '/for-donors' in path:
+            return "America's Blood Centers - For Donors"
+        elif '/one-pagers-faqs' in path:
+            return "America's Blood Centers - FAQs"
+        elif '/newsroom' in path:
+            return "America's Blood Centers - Newsroom"
+        else:
+            # Use the original title but clean it up
+            if 'Page' in original_title and any(char.isdigit() for char in original_title):
+                # Remove page numbers from titles
+                clean_title = re.sub(r'\s*-?\s*Page\s*\d+.*$', '', original_title, flags=re.IGNORECASE)
+                return clean_title.strip() or original_title
+            return original_title
+    except:
+        return original_title
 
 def add_blood_center_link_if_needed(user_message: str, sources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """

@@ -537,7 +537,10 @@ export class BedrockChatbotStack extends cdk.Stack {
             exclusionFilters: [
               ".*/wp-admin/.*", 
               ".*/login/.*", 
-              ".*/admin/.*"
+              ".*/admin/.*",
+              ".*/paged-\\d+/.*",  // Exclude paginated pages like /paged-2/5/
+              ".*/page/\\d+/.*",   // Exclude paginated pages like /page/2/
+              ".*/p\\d+/.*"        // Exclude paginated pages like /p2/
             ],
           },
         },
@@ -590,7 +593,10 @@ export class BedrockChatbotStack extends cdk.Stack {
             exclusionFilters: [
               ".*/wp-admin/.*", 
               ".*/login/.*", 
-              ".*/admin/.*"
+              ".*/admin/.*",
+              ".*/paged-\\d+/.*",  // Exclude paginated pages like /paged-2/5/
+              ".*/page/\\d+/.*",   // Exclude paginated pages like /page/2/
+              ".*/p\\d+/.*"        // Exclude paginated pages like /p2/
             ],
           },
         },
