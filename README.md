@@ -1,223 +1,134 @@
 # America's Blood Centers AI Chatbot
 
-An intelligent chatbot powered by Amazon Bedrock to provide information about blood donation, eligibility criteria, and donation centers.
+An intelligent chatbot powered by Amazon Bedrock that provides comprehensive information about blood donation, eligibility criteria, donation centers, and real-time blood supply status. Built specifically for America's Blood Centers to help educate the public and connect potential donors with local blood centers.
 
-## 🩸 Features
+## About the Chatbot
 
-- **Bilingual Support**: English and Spanish language support
-- **Intelligent Q&A**: Powered by Amazon Bedrock and Claude 3 Haiku
-- **Dual Data Sources**: 
-  - PDF documents with Bedrock Data Automation parser
-  - Live website content via Web Crawler
-- **Real-time Information**: Daily sync of blood supply status and news
-- **Blood Center Locator**: Automatic detection and linking to donation centers
-- **Admin Dashboard**: Data sync management and monitoring
-- **Responsive Design**: Works on desktop and mobile devices
+This AI-powered chatbot serves as a 24/7 virtual assistant for blood donation information, offering:
 
-## 🏗️ Architecture
+- **Instant Answers**: Get immediate responses to questions about blood donation eligibility, process, and safety
+- **Bilingual Support**: Full functionality in both English and Spanish to serve diverse communities
+- **Real-time Data**: Daily updates on blood supply status and current news from America's Blood Centers
+- **Smart Routing**: Automatically connects users to local blood donation centers
 
-### Backend (Amazon Bedrock)
-- **Knowledge Base**: OpenSearch Serverless vector database
-- **Data Sources**: 
-  - S3 for PDFs (Bedrock Data Automation parser)
-  - Web Crawler for websites (automatic HTML processing)
-- **Models**: Claude 3 Haiku for chat, Titan Embed for embeddings
-- **API**: AWS Lambda + API Gateway
-- **Deployment**: AWS CDK + automated buildspec
+## Repository Structure
 
-### Frontend (React + AWS Amplify)
-- **Framework**: React 18 with modern hooks
-- **Styling**: Custom CSS with responsive design
-- **Deployment**: AWS Amplify with CI/CD
-- **Features**: Real-time chat, language switching, admin controls
+```
+Americas-Blood-Centers-chatbot-Public/
+├── Backend/                    # AWS CDK infrastructure and Lambda functions
+│   ├── bin/                   # CDK app entry point
+│   ├── lib/                   # CDK stack definitions
+│   ├── lambda/                # Lambda function code
+│   ├── data-sources/          # Knowledge base data sources
+│   └── deploy.sh              # One-command deployment script
+├── Frontend/                   # React web application
+│   ├── src/                   # React components and logic
+│   ├── public/                # Static assets
+│   └── package.json           # Frontend dependencies
+└── docs/                      # Documentation and diagrams
+```
 
-## 🚀 Quick Start
+## Architecture
+
+![Architecture Diagram](docs/America's_Blood_Centers.png)
+
+**Key Components:**
+
+**AI & Machine Learning:**
+- **Amazon Bedrock Knowledge Base**: Vector database for semantic search and retrieval
+- **OpenSearch Serverless**: Vector collection for storing document embeddings
+- **Bedrock Model**: Bedrock LLM model for natural language conversations
+- **Amazon Titan Text Embeddings v1**: Model for generating vector embeddings
+- **Bedrock Data Automation**: Advanced PDF parsing with multimodal support
+
+**Data Storage:**
+- **S3 Buckets**: 
+  - Documents bucket for PDF storage
+  - Supplemental bucket for multimodal content (images from documents)
+  - Builds bucket for frontend deployment artifacts
+- **DynamoDB**: Chat history table with GSI for session and date queries
+
+**Compute & API:**
+- **AWS Lambda Functions**:
+  - Chat Lambda: Main conversation handler
+  - Sync Operations Lambda: Data source synchronization
+  - Daily Sync Lambda: Automated daily updates
+- **API Gateway**: RESTful API with CORS support and throttling
+- **Step Functions**: Sequential sync workflow orchestration
+
+**Data Sources:**
+- **S3 Data Source**: PDF documents with semantic chunking
+- **Web Crawler Data Source**: Live website content from americasblood.org
+- **Daily Sync Data Source**: Frequently updated pages (blood supply status)
+
+**Frontend & Authentication:**
+- **AWS Amplify**: React application hosting and CI/CD
+- **Amazon Cognito**: User pool for admin authentication
+
+**Automation & Monitoring:**
+- **EventBridge**: Daily sync scheduling (2 PM EST)
+- **IAM Roles**: Fine-grained permissions for all services
+- **CloudWatch**: Logging and monitoring (implicit)
+
+## Features
+
+**Backend:**
+- Serverless architecture using AWS CDK
+- OpenSearch Serverless for vector search
+- Automated data ingestion and daily sync
+- RESTful API with CORS support
+
+**Frontend:**
+- Responsive React application
+- Real-time chat interface with markdown support
+- Language toggle (English/Spanish)
+- Material-UI components for modern design
+- Mobile-optimized user experience
+
+## Quick Start
 
 ### Prerequisites
-- AWS Account with Bedrock access
-- Node.js 18+
-- AWS CLI configured
-- Git
+- AWS Account with Bedrock model access enabled
+- AWS CLI configured with appropriate permissions
 
-### 1. Clone Repository
+### Deployment
+
+1. **Clone the repository:**
 ```bash
-git clone https://github.com/your-org/Americas-Blood-Centers-chatbot-Public.git
-cd Americas-Blood-Centers-chatbot-Public
+git clone https://github.com/your-org/Americas-Blood-Centers-chatbot.git
+cd Americas-Blood-Centers-chatbot/Backend
 ```
 
-### 2. Deploy Backend
+2. **Run the deployment script:**
 ```bash
-cd Backend
-npm install
-cdk bootstrap
-cdk deploy AmericasBloodCentersBedrockStack
+chmod +x deploy.sh
+./deploy.sh
 ```
 
-### 3. Deploy Frontend
-```bash
-cd ../Frontend
-npm install
-# Update .env with your API Gateway URL
-npm run build
-# Deploy to Amplify (see DEPLOYMENT.md for details)
-```
+3. **Follow the interactive prompts** to configure your deployment settings.
 
-## 📊 Data Sources
+The script automatically handles:
+- Infrastructure deployment via CDK
+- Frontend build and deployment to Amplify
+- Data source configuration and ingestion
+- Daily sync automation setup
 
-### PDF Documents (S3 Data Source)
+## Data Sources
+
+The chatbot uses two primary data sources:
+
+**PDF Documents (S3):**
 - Blood donation statistics and reports
-- Eligibility guidelines and criteria  
-- Safety protocols and procedures
-- Advocacy documents and policy papers
-- Educational materials and FAQs
+- Eligibility guidelines and medical criteria
+- Safety protocols and educational materials
 
-**Processing**: Bedrock Data Automation parser extracts text while preserving document structure.
+**Live Website Content (Web Crawler):**
+- Current blood supply status from americasblood.org
+- Donation center locations and information
+- Latest news and announcements
 
-### Website Content (Web Crawler Data Source)
-- Live blood supply status updates
-- Current news and announcements
-- Donation center information
-- Frequently asked questions
-- Educational resources
+**Daily Updates:** Content is automatically refreshed every day at 2 AM UTC to ensure information accuracy.
 
-**Processing**: Automatic web crawling with smart content filtering.
+## License
 
-## 🔧 Configuration
-
-### Environment Variables
-```bash
-# Backend
-PROJECT_NAME=americas-blood-centers-bedrock
-MODEL_ID=global.anthropic.claude-sonnet-4-5-20250929-v1:0
-EMBEDDING_MODEL_ID=amazon.titan-embed-text-v1
-
-# Frontend
-REACT_APP_API_URL=https://your-api-gateway-url.amazonaws.com/prod
-REACT_APP_APP_NAME=America's Blood Centers AI Assistant
-```
-
-### Data Source URLs
-The system automatically processes content from:
-- `https://americasblood.org/for-donors/americas-blood-supply/`
-- `https://americasblood.org/for-donors/find-a-blood-center/`
-- `https://americasblood.org/news/`
-- `https://americasblood.org/newsroom/`
-- `https://americasblood.org/one-pagers-faqs/`
-
-## 💰 Cost Optimization
-
-### Bedrock vs Q Business
-- **Bedrock**: $8-20/month (usage-based)
-- **Q Business**: $20+/month per user (fixed)
-- **Savings**: 60-75% cost reduction
-
-### Cost Breakdown
-- **Knowledge Base**: ~$2-5/month
-- **Claude 3 Haiku**: ~$3-8/month  
-- **OpenSearch Serverless**: ~$2-5/month
-- **Lambda + API Gateway**: ~$1-2/month
-
-## 🌐 Multilingual Support
-
-### English
-- Native Claude 3 support
-- Comprehensive blood donation terminology
-- Medical and eligibility information
-
-### Spanish  
-- AI-powered translation
-- Culturally appropriate responses
-- Blood center information in Spanish
-
-## 🔒 Security & Compliance
-
-- **Data Privacy**: No personal information stored
-- **HIPAA Considerations**: Medical information for reference only
-- **Access Control**: IAM-based permissions
-- **Encryption**: Data encrypted in transit and at rest
-
-## 📱 Usage Examples
-
-### Basic Questions
-```
-User: "Who can donate blood?"
-Bot: "Most healthy adults aged 16-17 (with parental consent) or 18+ can donate blood. You must weigh at least 110 pounds and be in good health..."
-
-User: "¿Quién puede donar sangre?"
-Bot: "La mayoría de los adultos sanos de 16-17 años (con consentimiento parental) o 18+ pueden donar sangre..."
-```
-
-### Blood Center Locator
-```
-User: "Where can I donate blood near me?"
-Bot: "You can find donation centers near you at: https://americasblood.org/for-donors/find-a-blood-center/"
-```
-
-### Current Information
-```
-User: "What's the current blood supply status?"
-Bot: "Based on the latest information from America's Blood Centers, the national blood supply is currently..."
-```
-
-## 🛠️ Development
-
-### Local Development
-```bash
-# Backend
-cd Backend
-npm run watch
-
-# Frontend  
-cd Frontend
-npm start
-```
-
-### Testing
-```bash
-# Test API endpoint
-curl -X POST https://your-api-url/prod \
-  -H "Content-Type: application/json" \
-  -d '{"message":"How often can I donate blood?","language":"en"}'
-```
-
-### Admin Functions
-- **Data Sync**: Trigger manual data ingestion
-- **Status Check**: Monitor Knowledge Base health
-- **Analytics**: View usage statistics (if enabled)
-
-## 📚 Documentation
-
-- [Architecture Guide](ARCHITECTURE.md)
-- [Deployment Instructions](DEPLOYMENT.md)
-- [Data Sources Configuration](DATA_SOURCES.md)
-- [API Documentation](API.md)
-- [Troubleshooting Guide](TROUBLESHOOTING.md)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-For technical support or questions:
-- Create an issue in this repository
-- Contact the development team
-- Check the troubleshooting guide
-
-## 🙏 Acknowledgments
-
-- America's Blood Centers for domain expertise
-- AWS Bedrock team for AI capabilities
-- Open source community for tools and libraries
-
----
-
-**Powered by Amazon Bedrock** | **Built for America's Blood Centers** | **Saving Lives Through Technology** 🩸❤️
+This project is licensed under the MIT License.
